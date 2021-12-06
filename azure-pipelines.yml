@@ -1,0 +1,57 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- develop
+
+pool:
+  vmImage: windows-latest
+
+steps:
+- task: UniversalPackages@0
+  inputs:
+    command: 'download'
+    downloadDirectory: '$(System.DefaultWorkingDirectory)'
+    feedsToUse: 'internal'
+    vstsFeed: '081cf8ef-c508-4c02-8a71-26cef36f5bfc/56f2fcf7-2d57-406e-abe6-f6107cf7bf61'
+    vstsFeedPackage: '865705b2-17ed-4ce3-ab4b-b170ecbc7815'
+    vstsPackageVersion: '1.0.0'
+  displayName: Download Vulkan SDK
+- task: CmdLine@2
+  inputs:
+    workingDirectory: '$(System.DefaultWorkingDirectory)'
+    script: |
+      VulkanSDK.exe install --accept-licenses --accept-messages --confirm-command --root C:/VulkanSDK
+  displayName: Install Vulkan SDK
+- task: CmdLine@2
+  inputs:
+    script: setup.bat
+  displayName: "Setup"
+- task: CmdLine@2
+  inputs:
+    script: update_deps.bat
+  displayName: "Update deps"
+- task: CMake@1
+  inputs:
+    workingDirectory: build
+    cmakeArgs: -A x64 .. -DZE_WITH_SANITIZERS=OFF -DCMAKE_TOOLCHAIN_FILE:FILEPATH="$(System.DefaultWorkingDirectory)/src/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake"
+  displayName: 'CMake'
+- task: MSBuild@1
+  inputs:
+    solution: 'build/ALL_BUILD.vcxproj'
+    maximumCpuCount: true
+    platform: 'x64'
+  displayName: Compile Debug
+- task: CmdLine@2
+  inputs:
+    script: 'ctest . --output-on-failure --output-junit test-debug.xml'
+    workingDirectory: 'build'
+  displayName: Run Tests (Debug)
+- task: PublishTestResults@2
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: '**/test-*.xml'
+    testRunTitle: 'Tests Win64'
+  displayName: "Publish tests results"

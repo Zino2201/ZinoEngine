@@ -1,0 +1,16 @@
+add_subdirectory(core)
+add_subdirectory(gfx)
+add_subdirectory(imgui)
+add_subdirectory(engine)
+add_subdirectory(application)
+#add_subdirectory(renderer)
+add_subdirectory(shadercompiler)
+add_subdirectory(vulkanshadercompiler)
+
+if(ZE_WITH_VULKAN)
+	add_subdirectory(vulkangfx)
+endif()
+
+if(ZE_WITH_TESTS)
+	add_subdirectory(test)
+endif()
