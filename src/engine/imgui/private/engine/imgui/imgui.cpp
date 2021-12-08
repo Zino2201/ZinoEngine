@@ -2,12 +2,11 @@
 #include <Unknwn.h>
 #include <dxcapi.h>
 #include <fstream>
-#if ZE_PLATFORM(WINDOWS)
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#endif
 #include <glm/glm.hpp>
 
+#include "engine/application/application_module.hpp"
+#include "engine/application/platform_application.hpp"
+#include "engine/module/module_manager.hpp"
 #include "engine/shadercompiler/shader_compiler.hpp"
 
 namespace ze::ui
@@ -36,6 +35,8 @@ PipelineLayoutHandle pipeline_layout;
 std::vector<PipelineShaderStage> shader_stages;
 PipelineRenderPassState render_pass_state;
 PipelineMaterialState material_state;
+PlatformWindow* window;
+
 std::array color_blend_states = { PipelineColorBlendAttachmentState(
 	true,
 	BlendFactor::SrcAlpha,
@@ -60,10 +61,14 @@ std::vector<uint8_t> read_text_file(const std::string& in_name)
 	return buffer;
 }
 
-void initialize_imgui()
+void initialize_imgui(PlatformWindow* in_window)
 {
+	window = in_window;
+
 	ImGuiIO& io = ImGui::GetIO();
-	io.Fonts->AddFontDefault();
+	io.BackendPlatformName = "zinoengine_imgui";
+
+;	io.Fonts->AddFontDefault();
 
 	{
 		auto result = get_device()->create_buffer(BufferInfo::make_ubo(sizeof(GlobalData)));
@@ -187,6 +192,30 @@ void initialize_imgui()
 			offsetof(ImDrawVert, col)),
 	};
 	material_state.stages = shader_stages;
+}
+
+void new_frame()
+{
+	ImGuiIO& io = ImGui::GetIO();
+	const auto platform = get_module<ApplicationModule>("Application");
+
+	const auto mouse_pos = platform->get_application().get_mouse_pos() - window->get_position();
+	io.MousePos = ImVec2(mouse_pos.x, mouse_pos.y);
+}
+
+void on_mouse_down(PlatformWindow& in_window, PlatformMouseButton in_button, const glm::ivec2& in_mouse_pos)
+{
+	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = true;
+}
+
+void on_mouse_up(PlatformWindow& in_window, PlatformMouseButton in_button, const glm::ivec2& in_mouse_pos)
+{
+	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = false;
+}
+
+void on_mouse_wheel(PlatformWindow& in_window, const float in_delta, const glm::ivec2& in_mouse_pos)
+{
+	ImGui::GetIO().MouseWheel += in_delta;
 }
 
 void update_draw_data()

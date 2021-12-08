@@ -32,7 +32,10 @@ void WindowsPlatformApplication::register_win_class()
 	wnd_class.lpfnWndProc = 
 		[](HWND in_hwnd, uint32_t in_msg, WPARAM wparam, LPARAM lparam) -> LRESULT
 		{
-			return windows_platform_application->wnd_proc(in_hwnd, in_msg, wparam, lparam);
+			if(auto* window = windows_platform_application->get_window_by_hwnd(in_hwnd))
+				return window->wnd_proc(in_msg, wparam, lparam);
+
+			return DefWindowProc(in_hwnd, in_msg, wparam, lparam);
 		};
 	wnd_class.hInstance = instance;
 	wnd_class.lpszClassName = "ZinoEngine";
@@ -40,36 +43,75 @@ void WindowsPlatformApplication::register_win_class()
 	ZE_ASSERTF(::RegisterClass(&wnd_class), "Failed to register Windows window class!");
 }
 
-LRESULT CALLBACK WindowsPlatformApplication::wnd_proc(HWND in_hwnd, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
+void WindowsPlatformApplication::wnd_proc(WindowsPlatformWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
 {
+	auto convert_button = [](uint32_t in_msg) -> PlatformMouseButton
+	{
+		switch(in_msg)
+		{
+		default:
+		case WM_LBUTTONDOWN:
+		case WM_LBUTTONUP:
+		case WM_LBUTTONDBLCLK:
+			return PlatformMouseButton::Left;
+		case WM_MBUTTONDOWN:
+		case WM_MBUTTONUP:
+		case WM_MBUTTONDBLCLK:
+			return PlatformMouseButton::Middle;
+		case WM_RBUTTONDOWN:
+		case WM_RBUTTONUP:
+		case WM_RBUTTONDBLCLK:
+			return PlatformMouseButton::Right;
+		}
+	};
+
 	if (message_handler)
 	{
-		if (const auto window = get_window_by_hwnd(in_hwnd))
+		switch (in_msg)
 		{
-			window->wnd_proc(in_msg, in_wparam, in_lparam);
-
-			switch (in_msg)
-			{
-			case WM_SIZING:
-			{
-				const RECT* rect = reinterpret_cast<const RECT*>(in_lparam);
-				const uint32_t width = rect->right - rect->left;
-				const uint32_t height = rect->bottom - rect->top;
-				message_handler->on_resizing_window(*window, width, height);
-				break;
-			}
-			case WM_SIZE:
-			{
-				const uint32_t width = LOWORD(in_lparam);
-				const uint32_t height = HIWORD(in_lparam);
-				message_handler->on_resized_window(*window, width, height);
-				break;
-			}
-			}
+		case WM_SIZING:
+		{
+			message_handler->on_resizing_window(in_window, in_window.get_width(), in_window.get_height());
+			break;
+		}
+		case WM_SIZE:
+		{
+			message_handler->on_resized_window(in_window, in_window.get_width(), in_window.get_height());
+			break;
+		}
+		case WM_CLOSE:
+		{
+			message_handler->on_closing_window(in_window);
+			break;
+		}
+		case WM_LBUTTONDOWN:
+		case WM_MBUTTONDOWN:
+		case WM_RBUTTONDOWN:
+		{
+			message_handler->on_mouse_down(in_window, convert_button(in_msg), get_mouse_pos());
+			break;
+		}
+		case WM_LBUTTONUP:
+		case WM_MBUTTONUP:
+		case WM_RBUTTONUP:
+		{
+			message_handler->on_mouse_up(in_window, convert_button(in_msg), get_mouse_pos());
+			break;
+		}
+		case WM_LBUTTONDBLCLK:
+		case WM_MBUTTONDBLCLK:
+		case WM_RBUTTONDBLCLK:
+		{
+			message_handler->on_mouse_double_click(in_window, convert_button(in_msg), get_mouse_pos());
+			break;
+		}
+		case WM_MOUSEWHEEL:
+		{
+			message_handler->on_mouse_wheel(in_window, static_cast<float>(GET_WHEEL_DELTA_WPARAM(in_wparam)) / WHEEL_DELTA, get_mouse_pos());
+			break;
+		}
 		}
 	}
-
-	return DefWindowProc(in_hwnd, in_msg, in_wparam, in_lparam);
 }
 
 void WindowsPlatformApplication::register_window(WindowsPlatformWindow* window)
@@ -123,6 +165,13 @@ std::unique_ptr<PlatformWindow> WindowsPlatformApplication::create_window(const 
 		in_x,
 		in_y,
 		in_flags);
+}
+
+glm::ivec2 WindowsPlatformApplication::get_mouse_pos() const
+{
+	POINT point;
+	::GetCursorPos(&point);
+	return { point.x, point.y };
 }
 
 WindowsPlatformWindow* WindowsPlatformApplication::get_window_by_hwnd(HWND in_hwnd) const

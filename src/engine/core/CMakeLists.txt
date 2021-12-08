@@ -36,5 +36,10 @@ if(ZE_MONOLITHIC)
 else()
 	target_compile_definitions(core PUBLIC ZE_MONOLITHIC=0)
 endif()
+
+if(ZE_WITH_SANITIZERS)
+	target_compile_definitions(core PUBLIC BOOST_USE_ASAN=1)
+endif()
+
 target_compile_definitions(core PUBLIC "$<$<CONFIG:Debug>:ZE_BUILD_PRIVATE_DEFINITION_DEBUG=1>$<$<CONFIG:RelWithDebInfo>:ZE_BUILD_PRIVATE_DEFINITION_RELWITHDEBINFO=1>$<$<CONFIG:Release>:ZE_BUILD_PRIVATE_DEFINITION_RELEASE=1>")
 target_link_libraries(core PUBLIC robin_hood::robin_hood glm::glm fmt::fmt-header-only Boost::locale)

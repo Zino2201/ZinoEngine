@@ -1,5 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Options
+option(ZE_WITH_VULKAN "Build with Vulkan support (requires Vulkan SDK)" ON)
+option(ZE_MONOLITHIC "Monolithic mode (statc libs)" OFF)
+option(ZE_WITH_TESTS "With Tests" ON)
+option(ZE_WITH_SANITIZERS "With Sanitizers (requires ASan support from compiler)" OFF)
+
+message(STATUS "With Vulkan: ${ZE_WITH_VULKAN}")
+message(STATUS "With Tests: ${ZE_WITH_TESTS}")
+message(STATUS "With Sanitizers: ${ZE_WITH_SANITIZERS}")
+message(STATUS "Is Monolithic: ${ZE_MONOLITHIC}")
+
+if(ZE_WITH_SANITIZERS)
+    message(WARNING "Sanitiers are temporarly disabled, see #1")
+endif()
+
 project(ZinoEngine CXX)
 
 # Remove exceptions (enabled by default by CMake)
@@ -10,17 +25,6 @@ set(ZE_BIN_DIR ${ZE_ROOT_DIR}/bin/${CMAKE_BUILD_TYPE})
 set(ZE_SRC_DIR ${ZE_ROOT_DIR}/src)
 set(ZE_THIRD_PARTY_DIR ${ZE_SRC_DIR}/thirdparty)
 set(ZE_MODULE_PREFIX "ze-")
-
-# Options
-option(ZE_WITH_VULKAN "Build with Vulkan support (requires Vulkan SDK)" ON)
-option(ZE_MONOLITHIC "Monolithic mode (statc libs)" OFF)
-option(ZE_WITH_TESTS "With Tests" ON)
-option(ZE_WITH_SANITIZERS "With Sanitizers" ON)
-
-message(STATUS "With Vulkan: ${ZE_WITH_VULKAN}")
-message(STATUS "Monolithic: ${ZE_MONOLITHIC}")
-message(STATUS "With Tests: ${ZE_WITH_TESTS}")
-message(STATUS "With Sanitizers: ${ZE_WITH_SANITIZERS}")
 
 add_library(AllModules INTERFACE)
 
@@ -40,8 +44,8 @@ macro(ze_add_module TARGET)
         DEFINE_SYMBOL "")
 
     if(ZE_WITH_SANITIZERS)
-        target_compile_options(${TARGET} PRIVATE /fsanitize=address)
-        target_compile_definitions(${TARGET} PRIVATE ZE_HAS_ADDRESS_SANITIZER=1)
+        #target_compile_options(${TARGET} PRIVATE /fsanitize=address)
+        #target_compile_definitions(${TARGET} PRIVATE ZE_HAS_ASAN=1)
     endif()
 
     target_link_libraries(AllModules INTERFACE ${TARGET})

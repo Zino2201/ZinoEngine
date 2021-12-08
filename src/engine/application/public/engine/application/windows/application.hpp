@@ -15,6 +15,9 @@ public:
 	WindowsPlatformApplication(HINSTANCE in_instance);
 	~WindowsPlatformApplication();
 
+	/** Called by each WindowsPlatformWindow::wnd_proc */
+	void wnd_proc(WindowsPlatformWindow& window, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam);
+
 	void register_window(WindowsPlatformWindow* window);
 	void unregister_window(WindowsPlatformWindow* window);
 
@@ -26,11 +29,11 @@ public:
 		uint32_t in_x,
 		uint32_t in_y,
 		const PlatformWindowFlags& in_flags = PlatformWindowFlags()) override;
+	glm::ivec2 get_mouse_pos() const override;
 
 	[[nodiscard]] HINSTANCE get_hinstance() const { return instance; }
 private:
 	void register_win_class();
-	LRESULT CALLBACK wnd_proc(HWND in_hwnd, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam);
 	[[nodiscard]] WindowsPlatformWindow* get_window_by_hwnd(HWND in_hwnd) const;
 private:
 	PlatformApplicationMessageHandler* message_handler;

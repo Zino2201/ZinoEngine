@@ -1,7 +1,4 @@
-find_package(SDL2 CONFIG REQUIRED)
-
 ze_add_module(gfx 
-	public/engine/gfx/window.hpp
 	public/engine/gfx/device.hpp
 	public/engine/gfx/shader_format.hpp
 	public/engine/gfx/backend.hpp
@@ -23,7 +20,6 @@ ze_add_module(gfx
 	public/engine/gfx/sync.hpp
 	public/engine/gfx/rect.hpp
 	public/engine/gfx/uniform_buffer.hpp
-	private/engine/gfx/window.cpp
 	private/engine/gfx/threaded_command_pool.cpp
 	private/engine/gfx/device.cpp)
 target_include_directories(gfx PUBLIC public PRIVATE private)

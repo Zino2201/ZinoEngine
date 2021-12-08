@@ -9,15 +9,7 @@
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "msvc_x64" ],
       "intelliSenseMode": "windows-msvc-x64",
-      "addressSanitizerEnabled": false,
-      "cmakeToolchain": "C:/Projects/ZinoEngine/src/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake",
-      "variables": [
-        {
-          "name": "ZE_WITH_SANITIZERS",
-          "value": "False",
-          "type": "BOOL"
-        }
-      ]
+      "cmakeToolchain": "C:/Projects/ZinoEngine/src/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake"
     },
     {
       "name": "Release",

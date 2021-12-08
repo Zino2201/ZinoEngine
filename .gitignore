@@ -1,0 +1,9 @@
+.vs
+bin/
+build/
+src/thirdparty/vcpkg
+*.exe
+*.dll
+*.lib
+*.pdb
+*.obj

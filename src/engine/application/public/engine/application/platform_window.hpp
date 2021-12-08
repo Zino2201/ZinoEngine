@@ -2,7 +2,7 @@
 
 #include "engine/core.hpp"
 #include "engine/flags.hpp"
-#include "engine/multicast_delegate.hpp"
+#include <glm/glm.hpp>
 
 namespace ze
 {
@@ -32,6 +32,7 @@ public:
 	[[nodiscard]] virtual void* get_handle() const = 0;
 	[[nodiscard]] virtual uint32_t get_width() const = 0;
 	[[nodiscard]] virtual uint32_t get_height() const = 0;
+	[[nodiscard]] virtual glm::ivec2 get_position() const = 0;
 };
 
 }

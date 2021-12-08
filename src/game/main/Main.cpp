@@ -1,5 +1,3 @@
-#include "engine/gfx/window.hpp"
-#include <GLFW/glfw3.h>
 #include "engine/gfx/vulkan_backend_module.hpp"
 #include "engine/gfx/device.hpp"
 #include "engine/logger/logger.hpp"
@@ -10,6 +8,7 @@
 #include "engine/gfx/vulkan_backend_module.hpp"
 #include <tbb/parallel_for.h>
 #include "boost/locale/generator.hpp"
+#include "boost/locale/localization_backend.hpp"
 #include "engine/application/application_module.hpp"
 #include "engine/application/message_handler.hpp"
 #include "engine/application/platform_application.hpp"
@@ -21,21 +20,10 @@ int main()
 	logger::set_pattern("[{time}] [{severity}] ({category}) {message}");
 	logger::add_sink(std::make_unique<logger::StdoutSink>());
 
-	std::vector<double> coucou(512);
-	tbb::parallel_for(tbb::blocked_range<int>(0, 512),
-		[&](tbb::blocked_range<int> r)
-		{
-			for (int i = r.begin(); i < r.end(); ++i)
-			{
-				coucou[i] = 2 * std::log2(i + 1);
-			}
-		});
-
 	{
-	glfwInit();
 
 	const boost::locale::generator generator;
-	const std::locale locale = generator.generate(std::locale(), "");
+	const std::locale locale = generator.generate("");
 	std::locale::global(locale);
 
 	auto platform = get_module<ApplicationModule>("Application");
@@ -48,8 +36,29 @@ int main()
 			if(win)
 				win(in_window, in_width, in_height);
 		}
+
+		void on_closing_window(PlatformWindow& in_window) override
+		{
+			running = false;
+		}
+
+		void on_mouse_down(PlatformWindow& in_window, PlatformMouseButton in_button, const glm::ivec2& in_mouse_pos) override
+		{
+			ui::on_mouse_down(in_window, in_button, in_mouse_pos);
+		}
+
+		void on_mouse_up(PlatformWindow& in_window, PlatformMouseButton in_button, const glm::ivec2& in_mouse_pos) override
+		{
+			ui::on_mouse_up(in_window, in_button, in_mouse_pos);
+		}
+
+		void on_mouse_wheel(PlatformWindow& in_window, const float in_delta, const glm::ivec2& in_mouse_pos) override
+		{
+			ui::on_mouse_wheel(in_window, in_delta, in_mouse_pos);
+		}
 	public:
 		std::function<void(PlatformWindow&, uint32_t, uint32_t)> win;
+		bool running = true;
 	};
 
 	Santor s;
@@ -139,11 +148,12 @@ int main()
 	float cam_pitch = 0.f, cam_yaw = 0.f;
 
 	ImGui::SetCurrentContext(ImGui::CreateContext());
-	ui::initialize_imgui();
+	ui::initialize_imgui(win.get());
 
-	while (true)
+	while (s.running)
 	{
 		platform->get_application().pump_messages();
+		ui::new_frame();
 
 		if (device->acquire_swapchain_texture(swapchain.get(),
 			image_available_semaphore.get()) != gfx::GfxResult::Success)
@@ -166,6 +176,8 @@ int main()
 			std::to_string(result.get_value()->get_shader_language()).c_str());
 		ImGui::Text("%.0f FPS", 1.f / ImGui::GetIO().DeltaTime, ImGui::GetIO().DeltaTime);
 		ImGui::Text("%.2f ms", ImGui::GetIO().DeltaTime * 1000);
+		ImGui::Text("Mouse Pos: %f %f", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
+		ImGui::ShowDemoWindow();
 		ImGui::Render();
 
 		auto list = device->allocate_cmd_list(QueueType::Gfx);
@@ -203,10 +215,10 @@ int main()
 		std::this_thread::sleep_for(6ms);
 	}
 	ui::destroy_imgui();
-	ImGui::DestroyContext();
-	glfwTerminate();
-	unload_all_modules();
 	}
+
+	ImGui::DestroyContext();
+	unload_all_modules();
 
 	return 0;
 }
