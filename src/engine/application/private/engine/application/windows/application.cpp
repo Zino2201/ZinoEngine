@@ -1,5 +1,6 @@
 #include "engine/application/windows/application.hpp"
 #include "engine/application/windows/window.hpp"
+#include "engine/application/windows/cursor.hpp"
 #include "engine/application/message_handler.hpp"
 #include <ShellScalingApi.h>
 
@@ -208,6 +209,60 @@ glm::ivec2 WindowsApplication::get_mouse_pos() const
 const MonitorInfo& WindowsApplication::get_monitor_info(uint32_t in_monitor) const
 {
 	return monitor_infos[in_monitor];
+}
+
+std::unique_ptr<Cursor> WindowsApplication::create_system_cursor(SystemCursor in_cursor)
+{
+	LPCTSTR name = IDC_ARROW;
+	switch (in_cursor)
+	{
+	case SystemCursor::No:
+		name = IDC_NO;
+		break;
+	case SystemCursor::Crosshair:
+		name = IDC_CROSS;
+		break;
+	case SystemCursor::Ibeam:
+		name = IDC_IBEAM;
+		break;
+	case SystemCursor::Arrow:
+		name = IDC_ARROW;
+		break;
+	case SystemCursor::Hand:
+		name = IDC_HAND;
+		break;
+	case SystemCursor::SizeAll:
+		name = IDC_SIZEALL;
+		break;
+	case SystemCursor::SizeNorthEastSouthWest:
+		name = IDC_SIZENESW;
+		break;
+	case SystemCursor::SizeNorthSouth:
+		name = IDC_SIZENS;
+		break;
+	case SystemCursor::SizeNorthWestSouthEast:
+		name = IDC_SIZENWSE;
+		break;
+	case SystemCursor::SizeWestEast:
+		name = IDC_SIZEWE;
+		break;
+	case SystemCursor::Wait:
+	case SystemCursor::WaitArrow:
+		name = IDC_WAIT;
+		break;
+	}
+
+	return std::make_unique<WindowsCursor>(LoadCursor(nullptr, name));
+}
+
+void WindowsApplication::set_cursor(Cursor& in_cursor)
+{
+	SetCursor(static_cast<WindowsCursor&>(in_cursor).get_cursor());
+}
+
+void WindowsApplication::set_show_cursor(bool in_show)
+{
+	ShowCursor(in_show);
 }
 
 WindowsWindow* WindowsApplication::get_window_by_hwnd(HWND in_hwnd) const

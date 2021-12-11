@@ -203,10 +203,10 @@ Device::~Device()
 	for(auto& [create_info, rp] : render_passes)
 		get_backend_device()->destroy_render_pass(rp);
 
+	ZE_CHECKF(swapchains.get_size() == 0, "Some swapchains have not been freed before deleting the device!");
 	ZE_CHECKF(buffers.get_size() == 0, "Some buffers have not been freed before deleting the device!");
 	ZE_CHECKF(textures.get_size() == 0, "Some textures have not been freed before deleting the device!");
 	ZE_CHECKF(texture_views.get_size() == 0, "Some textures have not been freed before deleting the device!");
-	ZE_CHECKF(swapchains.get_size() == 0, "Some texture views have not been freed before deleting the device!");
 	ZE_CHECKF(pipeline_layouts.get_size() == 0, "Some pipeline layouts have not been freed before deleting the device!");
 	ZE_CHECKF(shaders.get_size() == 0, "Some shaders have not been freed before deleting the device!");
 	ZE_CHECKF(semaphores.get_size() == 0, "Some semaphores have not been freed before deleting the device!");

@@ -35,6 +35,11 @@ public:
 	uint32_t get_num_monitors() const override { return monitor_infos.size(); }
 	const MonitorInfo& get_monitor_info(uint32_t in_monitor) const override;
 
+	/** Cursor API */
+	std::unique_ptr<Cursor> create_system_cursor(SystemCursor in_cursor) override;
+	void set_cursor(Cursor& in_cursor) override;
+	void set_show_cursor(bool in_show) override;
+
 	[[nodiscard]] HINSTANCE get_hinstance() const { return instance; }
 private:
 	void register_win_class();

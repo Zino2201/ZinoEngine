@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include "platform_window.hpp"
+#include "cursor.hpp"
 
 namespace ze::platform
 {
@@ -38,6 +39,11 @@ public:
 	/** Monitor API */
 	[[nodiscard]] virtual uint32_t get_num_monitors() const = 0;
 	[[nodiscard]] virtual const MonitorInfo& get_monitor_info(uint32_t in_monitor) const = 0;
+
+	/** Cursor API */
+	[[nodiscard]] virtual std::unique_ptr<Cursor> create_system_cursor(SystemCursor in_cursor) = 0;
+	virtual void set_cursor(Cursor& in_cursor) = 0;
+	virtual void set_show_cursor(bool in_show) = 0;
 };
 
 }

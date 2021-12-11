@@ -13,8 +13,6 @@ namespace ze::imgui
 
 using namespace gfx;
 
-uint64_t vertex_buffer_size;
-uint64_t index_buffer_size;
 SamplerHandle sampler;
 TextureHandle font_texture;
 TextureViewHandle font_texture_view;
@@ -24,6 +22,7 @@ PipelineLayoutHandle pipeline_layout;
 std::vector<PipelineShaderStage> shader_stages;
 PipelineRenderPassState render_pass_state;
 PipelineMaterialState material_state;
+std::vector<std::unique_ptr<platform::Cursor>> mouse_cursors;
 
 std::array color_blend_states = { PipelineColorBlendAttachmentState(
 	true,
@@ -52,13 +51,28 @@ void initialize()
 {
 	IMGUI_CHECKVERSION();
 
+	const auto platform = get_module<platform::ApplicationModule>("Application");
+
 	ImGuiIO& io = ImGui::GetIO();
 	io.BackendPlatformName = "zinoengine_imgui_application";
 	io.BackendRendererName = "zinoengine_imgui_renderer";
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
 	io.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
 	io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
 	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+
+	/** Cursors */
+	mouse_cursors.resize(ImGuiMouseCursor_COUNT);
+	mouse_cursors[ImGuiMouseCursor_Arrow] = platform->get_application().create_system_cursor(platform::SystemCursor::Arrow);
+	mouse_cursors[ImGuiMouseCursor_TextInput] = platform->get_application().create_system_cursor(platform::SystemCursor::Ibeam);
+	mouse_cursors[ImGuiMouseCursor_ResizeAll] = platform->get_application().create_system_cursor(platform::SystemCursor::SizeAll);
+	mouse_cursors[ImGuiMouseCursor_ResizeNS] = platform->get_application().create_system_cursor(platform::SystemCursor::SizeNorthSouth);
+	mouse_cursors[ImGuiMouseCursor_ResizeEW] = platform->get_application().create_system_cursor(platform::SystemCursor::SizeWestEast);
+	mouse_cursors[ImGuiMouseCursor_ResizeNESW] = platform->get_application().create_system_cursor(platform::SystemCursor::SizeNorthEastSouthWest);
+	mouse_cursors[ImGuiMouseCursor_ResizeNWSE] = platform->get_application().create_system_cursor(platform::SystemCursor::SizeNorthWestSouthEast);
+	mouse_cursors[ImGuiMouseCursor_Hand] = platform->get_application().create_system_cursor(platform::SystemCursor::Hand);
+	mouse_cursors[ImGuiMouseCursor_NotAllowed] = platform->get_application().create_system_cursor(platform::SystemCursor::No);
 
 	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
 	platform_io.Platform_CreateWindow = [](ImGuiViewport* viewport)
@@ -151,12 +165,12 @@ void initialize()
 
 		logger::verbose("Resizing swapchain for imgui window to {}x{}", viewport->Size.x, viewport->Size.y);
 		auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
-		const auto old_swapchain = std::get<0>(renderer_data->window.swapchain).free();
+		const auto old_swapchain = UniqueSwapchain(std::get<0>(renderer_data->window.swapchain).free());
 		renderer_data->window.swapchain = UniqueSwapchain(get_device()->create_swapchain(SwapChainCreateInfo(
 			viewport->PlatformHandleRaw,
 			static_cast<uint32_t>(viewport->Size.x),
 			static_cast<uint32_t>(viewport->Size.y),
-			get_device()->get_swapchain_backend_handle(old_swapchain))).get_value());
+			get_device()->get_swapchain_backend_handle(old_swapchain.get()))).get_value());
 	};
 
 	platform_io.Renderer_SwapBuffers = [](ImGuiViewport* viewport, void* render_arg)
@@ -326,10 +340,22 @@ void new_frame(float in_delta_time, platform::Window& in_main_window)
 
 	ZE_CHECK(io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable);
 
+	/** Update cursor & mouse pos */
 	const auto mouse_pos = platform->get_application().get_mouse_pos();
 	io.MousePos = ImVec2(static_cast<float>(mouse_pos.x), static_cast<float>(mouse_pos.y));
 	io.DisplaySize = ImVec2(static_cast<float>(in_main_window.get_width()), 
 		static_cast<float>(in_main_window.get_height()));
+
+	ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
+	if(io.MouseDrawCursor || cursor == ImGuiMouseCursor_None)
+	{
+		platform->get_application().set_show_cursor(false);
+	}
+	else
+	{
+		platform->get_application().set_cursor(mouse_cursors[cursor] ? *mouse_cursors[cursor] : *mouse_cursors[ImGuiMouseCursor_Arrow]);
+		platform->get_application().set_show_cursor(true);
+	}
 
 	/** Acquire main window image as soon as possible */
 	{
@@ -557,6 +583,8 @@ void update_monitors()
 
 void destroy()
 {
+	mouse_cursors.clear();
+
 	get_device()->destroy_pipeline_layout(pipeline_layout);
 
 	get_device()->destroy_shader(vertex_shader);
