@@ -1,4 +1,4 @@
-#include "engine/gfx/vulkan_backend_module.hpp"
+﻿#include "engine/gfx/vulkan_backend_module.hpp"
 #include "engine/gfx/device.hpp"
 #include "engine/logger/logger.hpp"
 #include "engine/logger/sinks/stdout_sink.hpp"
@@ -72,7 +72,7 @@ int main()
 		720, 
 		0, 
 		0,
-		platform::WindowFlags(platform::WindowFlagBits::Centered));
+		platform::WindowFlags(platform::WindowFlagBits::Centered | platform::WindowFlagBits::Maximized));
 
 #if ZE_BUILD(DEBUG)
 	auto result = get_module<gfx::VulkanBackendModule>("vulkangfx")
@@ -176,7 +176,8 @@ int main()
 			std::to_string(result.get_value()->get_shader_language()).c_str());
 		ImGui::Text("%.0f FPS", 1.f / ImGui::GetIO().DeltaTime, ImGui::GetIO().DeltaTime);
 		ImGui::Text("%.2f ms", ImGui::GetIO().DeltaTime * 1000);
-		ImGui::Text("Mouse Pos: %f %f", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
+		ImGui::Text("Mouse Pos: %f %f 😳", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
+		ImGui::SetNextWindowBgAlpha(0.2f);
 		ImGui::ShowDemoWindow();
 		ImGui::Render();
 
@@ -187,7 +188,7 @@ int main()
 		imgui::present_viewports();
 
 		using namespace std::chrono_literals;
-		std::this_thread::sleep_for(6ms);
+		//std::this_thread::sleep_for(6ms);
 	}
 	ImGui::DestroyContext();
 	imgui::destroy();

@@ -24,6 +24,7 @@ public:
 	void set_title(const std::string& in_name) override;
 	void set_size(glm::ivec2 in_size) override;
 	void set_position(glm::ivec2 in_position) override;
+	void set_opacity(float in_alpha) override;
 	void show() override;
 
 	LRESULT CALLBACK wnd_proc(uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam);

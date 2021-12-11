@@ -21,6 +21,8 @@ WindowsWindow::WindowsWindow(
 	else
 		style |= WS_OVERLAPPEDWINDOW;
 
+	ex_style |= WS_EX_LAYERED;
+
 	/**
 	 * We need to adjust the initial rect since CreateWindowEx
 	 * width/height is the whole window size and not client area
@@ -45,6 +47,8 @@ WindowsWindow::WindowsWindow(
 		application.get_hinstance(),
 		nullptr);
 	ZE_ASSERT(hwnd);
+
+	SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
 
 	application.register_window(this);
 
@@ -124,6 +128,11 @@ void WindowsWindow::set_position(glm::ivec2 in_position)
 		width,
 		height,
 		0);
+}
+
+void WindowsWindow::set_opacity(float in_alpha)
+{
+	SetLayeredWindowAttributes(hwnd, 0, in_alpha * 255.f, LWA_ALPHA);
 }
 
 void WindowsWindow::show()

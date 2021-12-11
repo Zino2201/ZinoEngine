@@ -1,3 +1,5 @@
+find_package(freetype CONFIG REQUIRED)
+
 ze_add_module(imgui
 	private/engine/imgui/imgui.cpp
 	public/engine/imgui/imgui.hpp
@@ -5,6 +7,9 @@ ze_add_module(imgui
 	${IMGUI_ROOT_DIR}/imgui_draw.cpp
 	${IMGUI_ROOT_DIR}/imgui_demo.cpp
 	${IMGUI_ROOT_DIR}/imgui_tables.cpp
-	${IMGUI_ROOT_DIR}/imgui_widgets.cpp)
+	${IMGUI_ROOT_DIR}/imgui_widgets.cpp
+	${IMGUI_ROOT_DIR}/misc/freetype/imgui_freetype.h
+	${IMGUI_ROOT_DIR}/misc/freetype/imgui_freetype.cpp)
 target_include_directories(imgui PUBLIC public ${IMGUI_ROOT_DIR} PRIVATE private)
-target_link_libraries(imgui PUBLIC core gfx PRIVATE shadercompiler application)
+target_compile_definitions(imgui PUBLIC IMGUI_ENABLE_FREETYPE)
+target_link_libraries(imgui PUBLIC core gfx PRIVATE shadercompiler application freetype)

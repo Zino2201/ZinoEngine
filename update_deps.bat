@@ -15,16 +15,4 @@ vcpkg install imgui:x64-windows
 vcpkg install tbb:x64-windows
 vcpkg install boost-dynamic-bitset:x64-windows
 vcpkg install boost-locale:x64-windows
-exit
-
-echo Installing libs for x64-windows-asan
-vcpkg install fmt:x64-windows-asan
-vcpkg install stb:x64-windows-asan
-vcpkg install glm:x64-windows-asan
-vcpkg install vulkan-memory-allocator:x64-windows-asan
-vcpkg install robin-hood-hashing:x64-windows-asan
-vcpkg install gtest:x64-windows-asan
-vcpkg install imgui:x64-windows-asan
-vcpkg install tbb:x64-windows-asan
-vcpkg install boost-dynamic-bitset:x64-windows-asan
-vcpkg install boost-locale:x64-windows-asan
+vcpkg install freetype:x64-windows

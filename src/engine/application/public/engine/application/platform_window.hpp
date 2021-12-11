@@ -33,6 +33,7 @@ public:
 	virtual void set_title(const std::string& in_name) = 0;
 	virtual void set_size(glm::ivec2 in_size) = 0;
 	virtual void set_position(glm::ivec2 in_position) = 0;
+	virtual void set_opacity(float in_alpha) = 0;
 	virtual void show() = 0;
 
 	[[nodiscard]] virtual void* get_handle() const = 0;

@@ -57,6 +57,7 @@ void initialize()
 	io.BackendPlatformName = "zinoengine_imgui_application";
 	io.BackendRendererName = "zinoengine_imgui_renderer";
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
 	io.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
 	io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
@@ -133,6 +134,12 @@ void initialize()
 		platform_data->get_window()->show();
 	};
 
+	platform_io.Platform_SetWindowAlpha = [](ImGuiViewport* viewport, float alpha)
+	{
+		const auto* platform_data = static_cast<ViewportPlatformData*>(viewport->PlatformUserData);
+		platform_data->get_window()->set_opacity(alpha);
+	};
+
 	platform_io.Platform_DestroyWindow = [](ImGuiViewport* viewport)
 	{
 		delete static_cast<ViewportPlatformData*>(viewport->PlatformUserData);
@@ -188,7 +195,7 @@ void initialize()
 			draw_viewport(viewport);
 	};
 
-	io.Fonts->AddFontDefault();
+	io.Fonts->AddFontFromFileTTF("assets/fonts/ReadexPro-Light.ttf", 18.f);
 
 	{
 		auto result = get_device()->create_sampler(SamplerInfo());
@@ -207,7 +214,7 @@ void initialize()
 
 		auto tex_result = get_device()->create_texture(TextureInfo::make_immutable_2d(width,
 			height,
-			Format::R8G8B8A8Unorm,
+			Format::R8G8B8A8Srgb,
 			1,
 			TextureUsageFlags(TextureUsageFlagBits::Sampled),
 			{ data, data + (width * height * 4)}).set_debug_name("ImGui Font Texture"));
@@ -217,7 +224,7 @@ void initialize()
 
 		auto view_result = get_device()->create_texture_view(TextureViewInfo::make_2d(
 			font_texture,
-			Format::R8G8B8A8Unorm));
+			Format::R8G8B8A8Srgb));
 		ZE_ASSERTF(view_result.has_value(), "Failed to create ImGui font texture view: {}", view_result.get_error());
 		font_texture_view = view_result.get_value();
 	}
