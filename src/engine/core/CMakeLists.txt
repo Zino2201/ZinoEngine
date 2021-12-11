@@ -30,7 +30,7 @@ target_include_directories(core PUBLIC public PRIVATE private)
 target_compile_options(core PUBLIC /GR- /W4)
 target_compile_features(core PUBLIC cxx_std_20)
 target_compile_definitions(core PUBLIC FMT_EXCEPTIONS=0 _HAS_EXCEPTIONS=0 ZE_MODULE_PREFIX="${ZE_MODULE_PREFIX}" 
-	GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE NOMINMAX)
+	GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE NOMINMAX UNICODE D_UNICODE)
 if(ZE_MONOLITHIC)
 	target_compile_definitions(core PUBLIC ZE_MONOLITHIC=1)
 else()

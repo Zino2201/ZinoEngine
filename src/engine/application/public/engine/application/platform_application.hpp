@@ -1,27 +1,43 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include "platform_window.hpp"
 
-namespace ze
+namespace ze::platform
 {
 
-class PlatformApplicationMessageHandler;
+class ApplicationMessageHandler;
 
-class PlatformApplication
+struct MonitorInfo
+{
+	glm::ivec4 bounds;
+	glm::ivec4 work_bounds;
+	float dpi;
+
+	MonitorInfo(glm::ivec4 in_bounds,
+		glm::ivec4 in_work_bounds,
+		float in_dpi) : bounds(in_bounds), work_bounds(in_work_bounds), dpi(in_dpi) {}
+};
+
+class Application
 {
 public:
-	PlatformApplication() = default;
-	virtual ~PlatformApplication() = default;
+	Application() = default;
+	virtual ~Application() = default;
 
-	virtual void set_message_handler(PlatformApplicationMessageHandler* in_message_handler) = 0;
+	virtual void set_message_handler(ApplicationMessageHandler* in_message_handler) = 0;
 	virtual void pump_messages() = 0;
-	[[nodiscard]] virtual std::unique_ptr<PlatformWindow> create_window(const std::string& in_name,
+	[[nodiscard]] virtual std::unique_ptr<Window> create_window(const std::string& in_name,
 		uint32_t in_width,
 		uint32_t in_height,
 		uint32_t in_x,
 		uint32_t in_y,
-		const PlatformWindowFlags& in_flags = PlatformWindowFlags()) = 0;
+		const WindowFlags& in_flags = WindowFlags()) = 0;
 	[[nodiscard]] virtual glm::ivec2 get_mouse_pos() const = 0;
+
+	/** Monitor API */
+	[[nodiscard]] virtual uint32_t get_num_monitors() const = 0;
+	[[nodiscard]] virtual const MonitorInfo& get_monitor_info(uint32_t in_monitor) const = 0;
 };
 
 }

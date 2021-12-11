@@ -4,30 +4,36 @@
 #include "engine/flags.hpp"
 #include <glm/glm.hpp>
 
-namespace ze
+namespace ze::platform
 {
 
-enum class PlatformWindowFlagBits
+enum class WindowFlagBits
 {
 	Centered = 1 << 0,
 	Maximized = 1 << 1,
+	Borderless = 1 << 2,
 };
-ZE_ENABLE_FLAG_ENUMS(PlatformWindowFlagBits, PlatformWindowFlags);
+ZE_ENABLE_FLAG_ENUMS(WindowFlagBits, WindowFlags);
 
-class PlatformWindow
+class Window
 {
 public:
-	PlatformWindow(const std::string& in_name,
+	Window(const std::string& in_name,
 		uint32_t in_width,
 		uint32_t in_height,
 		uint32_t in_x,
 		uint32_t in_y,
-		const PlatformWindowFlags& in_flags = PlatformWindowFlags())
+		const WindowFlags& in_flags = WindowFlags())
 	{
 		UnusedParameters{ in_name, in_width, in_height, in_x, in_y, in_flags };
 	}
 
-	virtual ~PlatformWindow() = default;
+	virtual ~Window() = default;
+
+	virtual void set_title(const std::string& in_name) = 0;
+	virtual void set_size(glm::ivec2 in_size) = 0;
+	virtual void set_position(glm::ivec2 in_position) = 0;
+	virtual void show() = 0;
 
 	[[nodiscard]] virtual void* get_handle() const = 0;
 	[[nodiscard]] virtual uint32_t get_width() const = 0;

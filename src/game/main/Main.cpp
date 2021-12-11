@@ -26,51 +26,53 @@ int main()
 	const std::locale locale = generator.generate("");
 	std::locale::global(locale);
 
-	auto platform = get_module<ApplicationModule>("Application");
+	auto platform = get_module<platform::ApplicationModule>("Application");
 
-	class Santor : public PlatformApplicationMessageHandler
+	class Santor : public platform::ApplicationMessageHandler
 	{
 	public:
-		void on_resized_window(PlatformWindow& in_window, uint32_t in_width, uint32_t in_height) override
+		void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t in_height) override
 		{
 			if(win)
 				win(in_window, in_width, in_height);
+
+			imgui::on_resized_window(in_window, in_width, in_height);
 		}
 
-		void on_closing_window(PlatformWindow& in_window) override
+		void on_closing_window(platform::Window& in_window) override
 		{
 			running = false;
 		}
 
-		void on_mouse_down(PlatformWindow& in_window, PlatformMouseButton in_button, const glm::ivec2& in_mouse_pos) override
+		void on_mouse_down(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos) override
 		{
-			ui::on_mouse_down(in_window, in_button, in_mouse_pos);
+			imgui::on_mouse_down(in_window, in_button, in_mouse_pos);
 		}
 
-		void on_mouse_up(PlatformWindow& in_window, PlatformMouseButton in_button, const glm::ivec2& in_mouse_pos) override
+		void on_mouse_up(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos) override
 		{
-			ui::on_mouse_up(in_window, in_button, in_mouse_pos);
+			imgui::on_mouse_up(in_window, in_button, in_mouse_pos);
 		}
 
-		void on_mouse_wheel(PlatformWindow& in_window, const float in_delta, const glm::ivec2& in_mouse_pos) override
+		void on_mouse_wheel(platform::Window& in_window, const float in_delta, const glm::ivec2& in_mouse_pos) override
 		{
-			ui::on_mouse_wheel(in_window, in_delta, in_mouse_pos);
+			imgui::on_mouse_wheel(in_window, in_delta, in_mouse_pos);
 		}
 	public:
-		std::function<void(PlatformWindow&, uint32_t, uint32_t)> win;
+		std::function<void(platform::Window&, uint32_t, uint32_t)> win;
 		bool running = true;
 	};
 
 	Santor s;
 	platform->get_application().set_message_handler(&s);
 
-	std::unique_ptr<PlatformWindow> win = platform->get_application().create_window(
+	std::unique_ptr<platform::Window> win = platform->get_application().create_window(
 		"ZinoEngine", 
 		1280, 
 		720, 
 		0, 
 		0,
-		PlatformWindowFlags(PlatformWindowFlagBits::Centered | PlatformWindowFlagBits::Maximized));
+		platform::WindowFlags(platform::WindowFlagBits::Centered));
 
 #if ZE_BUILD(DEBUG)
 	auto result = get_module<gfx::VulkanBackendModule>("vulkangfx")
@@ -125,18 +127,22 @@ int main()
 	UniqueTextureView depth_texture_view(device->create_texture_view(TextureViewInfo::make_depth(depth_texture.get(),
 		Format::D24UnormS8Uint).set_debug_name("Depth Buffer View")).get_value());
 
-	s.win = [&](PlatformWindow& win, uint32_t width, uint32_t height)
+	s.win = [&](platform::Window& my_win, uint32_t width, uint32_t height)
 	{
+		if (win.get() != &my_win)
+			return;
+
 			logger::verbose("Resizing swapchain and recreating resources...");
 
 			UniqueSwapchain old_swapchain(swapchain.free());
 
 			device->wait_idle();
 			swapchain = UniqueSwapchain(device->create_swapchain(gfx::SwapChainCreateInfo(
-				win.get_handle(),
+				my_win.get_handle(),
 				width,
 				height,
 				device->get_swapchain_backend_handle(old_swapchain.get()))).get_value());
+			imgui::update_main_viewport(my_win, swapchain.get());
 
 			depth_texture = UniqueTexture(device->create_texture(TextureInfo::make_depth_stencil_attachment(
 				width, height, Format::D24UnormS8Uint).set_debug_name("Depth Buffer Texture")).get_value());
@@ -148,16 +154,12 @@ int main()
 	float cam_pitch = 0.f, cam_yaw = 0.f;
 
 	ImGui::SetCurrentContext(ImGui::CreateContext());
-	ui::initialize_imgui(win.get());
+	imgui::initialize();
+	imgui::initialize_main_viewport(*win.get(), swapchain.get());
 
 	while (s.running)
 	{
 		platform->get_application().pump_messages();
-		ui::new_frame();
-
-		if (device->acquire_swapchain_texture(swapchain.get(),
-			image_available_semaphore.get()) != gfx::GfxResult::Success)
-			continue;
 
 		device->new_frame();
 
@@ -166,9 +168,7 @@ int main()
 		float delta_time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
 		start_time = current_time;
 
-		ImGuiIO& io = ImGui::GetIO();
-		io.DisplaySize = { static_cast<float>(win->get_width()), static_cast<float>(win->get_height()) };
-		io.DeltaTime = delta_time;
+		imgui::new_frame(delta_time, *win.get());
 
 		ImGui::NewFrame();
 		ImGui::Text("%s (Shader Model: %s, Shader Format: %s)", result.get_value()->get_name().data(),
@@ -180,44 +180,19 @@ int main()
 		ImGui::ShowDemoWindow();
 		ImGui::Render();
 
-		auto list = device->allocate_cmd_list(QueueType::Gfx);
-
-		std::array clear_values = { ClearValue(ClearColorValue({0, 0, 0, 1})),
-			ClearValue(ClearDepthStencilValue(1.f, 0)) };
-		std::array color_attachments = { device->get_swapchain_backbuffer_view(swapchain.get()) };
-
-		RenderPassInfo info;
-		info.render_area = Rect2D(0, 0, win->get_width(), win->get_height());
-		info.color_attachments = color_attachments;
-		info.clear_attachment_flags = 1 << 0;
-		info.store_attachment_flags = 1 << 0;
-		info.clear_values = clear_values;
-		info.depth_stencil_attachment = depth_texture_view.get();
-
-		std::array color_attachments_refs = { 0Ui32 };
-		std::array subpasses = { RenderPassInfo::Subpass(color_attachments_refs,
-			{},
-			{},
-			RenderPassInfo::DepthStencilMode::ReadWrite) };
-		info.subpasses = subpasses;
-		device->cmd_begin_render_pass(list, info);
-		device->cmd_bind_texture_view(list, 0, 3, TextureViewHandle());
-
-		ui::draw_imgui(list);
-
-		device->cmd_end_render_pass(list);
-		device->submit(list, render_wait_semaphores, render_finished_semaphores);
+		ImGui::UpdatePlatformWindows();
+		imgui::draw_viewports();
 		device->end_frame();
 
-		device->present(swapchain.get(), present_wait_semaphores);
+		imgui::present_viewports();
 
 		using namespace std::chrono_literals;
 		std::this_thread::sleep_for(6ms);
 	}
-	ui::destroy_imgui();
+	ImGui::DestroyContext();
+	imgui::destroy();
 	}
 
-	ImGui::DestroyContext();
 	unload_all_modules();
 
 	return 0;

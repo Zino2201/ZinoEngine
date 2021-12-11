@@ -48,6 +48,7 @@ Result<std::unique_ptr<Backend>, std::string> VulkanBackendModule::create_vulkan
 					break;
 				case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
 					logger::error(log_vulkan, "[{}] {}", type, callback_data->pMessage);
+					ZE_DEBUGBREAK();
 					break;
 				}
 

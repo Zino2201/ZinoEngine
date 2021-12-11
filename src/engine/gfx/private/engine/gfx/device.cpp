@@ -132,6 +132,10 @@ void CommandList::update_pipeline_state()
 		Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource(),
 		render_pass,
 		0);
+
+	ZE_CHECKF(pipeline_layout, "No pipeline layout set!");
+	ZE_CHECKF(render_pass, "No render pass set!");
+
 	auto pipeline = device.get_or_create_pipeline(create_info);
 	
 	device.get_backend_device()->cmd_bind_pipeline(
@@ -176,7 +180,7 @@ Device::Device(Backend& in_backend,
 {
 	current_device = this;
 
-	frames.resize(Device::max_frames_in_flight);
+	frames.resize(max_frames_in_flight);
 }
 
 Device::~Device()
@@ -208,9 +212,6 @@ Device::~Device()
 	ZE_CHECKF(semaphores.get_size() == 0, "Some semaphores have not been freed before deleting the device!");
 	ZE_CHECKF(fences.get_size() == 0, "Some fences have not been freed before deleting the device!");
 	ZE_CHECKF(samplers.get_size() == 0, "Some samplers have not been freed before deleting the device!");
-
-	/** We can't do this yet as some dtor depends on current_device (get_device()) */
-	//current_device = nullptr;	
 }
 
 Device::Frame::Frame() : gfx_command_pool(QueueType::Gfx),
@@ -339,6 +340,8 @@ void Device::submit_queue(const QueueType& in_type)
 	for(const auto& handle : *wait_semaphores_handles)
 	{
 		wait_semaphores.emplace_back(cast_handle<Semaphore>(handle)->get_resource());
+
+		// TODO: Specify stage in submit()
 		wait_pipeline_flags.emplace_back(PipelineStageFlags(PipelineStageFlagBits::TopOfPipe));
 	}
 	

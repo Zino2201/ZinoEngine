@@ -1,2 +1,2 @@
-CPMAddPackage("gh:ocornut/imgui#80b5fb51edba2fd3dea76ec3e88153e2492243d1")
+CPMAddPackage("gh:ocornut/imgui#docking")
 set(IMGUI_ROOT_DIR ${imgui_SOURCE_DIR} CACHE STRING "" FORCE)

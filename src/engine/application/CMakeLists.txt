@@ -11,6 +11,7 @@ if(WIN32)
 		public/engine/application/windows/window.hpp
 		private/engine/application/windows/application.cpp
 		private/engine/application/windows/window.cpp)
+	target_link_libraries(application PRIVATE shcore)
 endif()
 
 target_include_directories(application PUBLIC public PRIVATE private)

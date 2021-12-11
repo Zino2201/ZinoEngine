@@ -16,6 +16,7 @@ enum class GfxResult
 	ErrorOutOfHostMemory = -3,
 	ErrorInvalidParameter = -4,
 	ErrorInitializationFailed = -5,
+	ErrorSurfaceLost = 6,
 };
 
 }

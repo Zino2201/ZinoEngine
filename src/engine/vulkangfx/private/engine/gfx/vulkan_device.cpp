@@ -960,7 +960,10 @@ void VulkanDevice::unmap_buffer(const BackendDeviceResource& in_buffer)
 std::pair<GfxResult, uint32_t> VulkanDevice::acquire_swapchain_image(const BackendDeviceResource& in_swapchain,
 	const BackendDeviceResource& in_signal_semaphore)
 {
-	VkSemaphore signal_semaphore = get_resource<VulkanSemaphore>(in_signal_semaphore)->get_semaphore();
+	VkSemaphore signal_semaphore = VK_NULL_HANDLE;
+	if(in_signal_semaphore != null_backend_resource)
+		signal_semaphore = get_resource<VulkanSemaphore>(in_signal_semaphore)->get_semaphore();
+
 	auto swapchain = get_resource<VulkanSwapChain>(in_swapchain);
 	return { convert_result(swapchain->acquire_image(signal_semaphore)), swapchain->get_current_image_idx() };
 }

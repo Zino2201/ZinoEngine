@@ -54,7 +54,7 @@ public:
 	void update(const T& in_data)
 	{
 		ZE_CHECK(buffer && mapped_data);
-		memcpy(mapped_data, in_data, sizeof(T));
+		memcpy(mapped_data, &in_data, sizeof(T));
 	}
 
 	[[nodiscard]] BufferHandle get_handle() const { return buffer.get(); }

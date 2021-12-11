@@ -597,6 +597,7 @@ class Device final
 			expired_shaders.clear();
 			expired_pipeline_layouts.clear();
 			expired_pipelines.clear();
+			expired_semaphores.clear();
 
 			gfx_command_pool.reset();
 
@@ -731,7 +732,7 @@ public:
 	[[nodiscard]] static T* cast_handle(const auto& in_handle)
 		requires detail::IsHandleCompatibleWith<T, std::decay_t<decltype(in_handle)>>::value
 	{
-		return reinterpret_cast<T*>(in_handle.get_handle());		
+		return in_handle ? reinterpret_cast<T*>(in_handle.get_handle()) : nullptr;		
 	}
 
 	template<typename Handle>

@@ -3,27 +3,16 @@
 #include <dxcapi.h>
 #include <fstream>
 #include <glm/glm.hpp>
-
 #include "engine/application/application_module.hpp"
 #include "engine/application/platform_application.hpp"
 #include "engine/module/module_manager.hpp"
 #include "engine/shadercompiler/shader_compiler.hpp"
 
-namespace ze::ui
+namespace ze::imgui
 {
 
 using namespace gfx;
 
-struct GlobalData
-{
-	glm::vec2 translate;
-	glm::vec2 scale;
-};
-
-BufferHandle global_data_ubo;
-void* global_data_ubo_data = nullptr;
-UniqueBuffer vertex_buffer;
-UniqueBuffer index_buffer;
 uint64_t vertex_buffer_size;
 uint64_t index_buffer_size;
 SamplerHandle sampler;
@@ -35,7 +24,6 @@ PipelineLayoutHandle pipeline_layout;
 std::vector<PipelineShaderStage> shader_stages;
 PipelineRenderPassState render_pass_state;
 PipelineMaterialState material_state;
-PlatformWindow* window;
 
 std::array color_blend_states = { PipelineColorBlendAttachmentState(
 	true,
@@ -45,39 +33,148 @@ std::array color_blend_states = { PipelineColorBlendAttachmentState(
 	BlendFactor::OneMinusSrcAlpha,
 	BlendFactor::Zero,
 	BlendOp::Add) };
-ImDrawData* draw_data = nullptr;
 
 std::vector<uint8_t> read_text_file(const std::string& in_name)
 {
 	std::ifstream file(in_name, std::ios::ate | std::ios::binary);
 
 	const size_t file_size = file.tellg();
-	
+
 	std::vector<uint8_t> buffer(file_size);
 	file.seekg(0);
-	file.read((char*) buffer.data(), file_size);
+	file.read((char*)buffer.data(), file_size);
 	file.close();
 
 	return buffer;
 }
 
-void initialize_imgui(PlatformWindow* in_window)
+void initialize()
 {
-	window = in_window;
+	IMGUI_CHECKVERSION();
 
 	ImGuiIO& io = ImGui::GetIO();
-	io.BackendPlatformName = "zinoengine_imgui";
+	io.BackendPlatformName = "zinoengine_imgui_application";
+	io.BackendRendererName = "zinoengine_imgui_renderer";
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
+	io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
+	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
-;	io.Fonts->AddFontDefault();
-
+	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	platform_io.Platform_CreateWindow = [](ImGuiViewport* viewport)
 	{
-		auto result = get_device()->create_buffer(BufferInfo::make_ubo(sizeof(GlobalData)));
-		ZE_ASSERTF(result.has_value(), "Failed to create ImGui UBO: {}", result.get_error());
-		global_data_ubo = result.get_value();
+		const auto platform = get_module<platform::ApplicationModule>("Application");
 
-		auto map = get_device()->map_buffer(global_data_ubo);
-		global_data_ubo_data = map.get_value();
-	}
+		auto* platform_data = new ViewportPlatformData;
+		viewport->PlatformUserData = platform_data;
+
+		platform_data->window = platform->get_application().create_window("ImGui Viewport Window",
+			static_cast<uint32_t>(viewport->Size.x),
+			static_cast<uint32_t>(viewport->Size.y),
+			static_cast<uint32_t>(viewport->Pos.x),
+			static_cast<uint32_t>(viewport->Pos.y),
+			platform::WindowFlags(platform::WindowFlagBits::Borderless));
+
+		viewport->PlatformHandleRaw = platform_data->get_window()->get_handle();
+	};
+
+	platform_io.Platform_GetWindowSize = [](ImGuiViewport* viewport) -> ImVec2
+	{
+		const auto* platform_data = new ViewportPlatformData;
+		return
+		{
+			static_cast<float>(platform_data->get_window()->get_width()),
+			static_cast<float>(platform_data->get_window()->get_height())
+		};
+	};
+
+	platform_io.Platform_GetWindowPos = [](ImGuiViewport* viewport) -> ImVec2
+	{
+		const auto* platform_data = static_cast<ViewportPlatformData*>(viewport->PlatformUserData);
+		return ImVec2(static_cast<float>(platform_data->get_window()->get_position().x),
+			static_cast<float>(platform_data->get_window()->get_position().y));
+	};
+
+	platform_io.Platform_SetWindowPos = [](ImGuiViewport* viewport, ImVec2 size)
+	{
+		const auto* platform_data = static_cast<ViewportPlatformData*>(viewport->PlatformUserData);
+		platform_data->get_window()->set_position({ size.x, size.y });
+	};
+
+	platform_io.Platform_SetWindowSize = [](ImGuiViewport* viewport, ImVec2 size)
+	{
+		const auto* platform_data = static_cast<ViewportPlatformData*>(viewport->PlatformUserData);
+		platform_data->get_window()->set_size({ size.x, size.y });
+	};
+
+	platform_io.Platform_SetWindowTitle = [](ImGuiViewport* viewport, const char* title)
+	{
+		const auto* platform_data = static_cast<ViewportPlatformData*>(viewport->PlatformUserData);
+		platform_data->get_window()->set_title(title);
+	};
+
+	platform_io.Platform_ShowWindow = [](ImGuiViewport* viewport)
+	{
+		const auto* platform_data = static_cast<ViewportPlatformData*>(viewport->PlatformUserData);
+		platform_data->get_window()->show();
+	};
+
+	platform_io.Platform_DestroyWindow = [](ImGuiViewport* viewport)
+	{
+		delete static_cast<ViewportPlatformData*>(viewport->PlatformUserData);
+		viewport->PlatformUserData = nullptr;
+	};
+
+	platform_io.Renderer_CreateWindow = [](ImGuiViewport* viewport)
+	{
+		auto* renderer_data = new ViewportRendererData;
+		viewport->RendererUserData = renderer_data;
+
+		renderer_data->window.swapchain = UniqueSwapchain(get_device()->create_swapchain(SwapChainCreateInfo(
+			viewport->PlatformHandleRaw,
+			static_cast<uint32_t>(viewport->Size.x),
+			static_cast<uint32_t>(viewport->Size.y))).get_value());
+	};
+
+	platform_io.Renderer_DestroyWindow = [](ImGuiViewport* viewport)
+	{
+		delete static_cast<ViewportRendererData*>(viewport->RendererUserData);
+		viewport->RendererUserData = nullptr;
+	};
+
+	platform_io.Renderer_SetWindowSize = [](ImGuiViewport* viewport, ImVec2 size)
+	{
+		if (viewport == ImGui::GetMainViewport())
+			return;
+		
+		get_device()->wait_idle();
+
+		logger::verbose("Resizing swapchain for imgui window to {}x{}", viewport->Size.x, viewport->Size.y);
+		auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
+		const auto old_swapchain = std::get<0>(renderer_data->window.swapchain).free();
+		renderer_data->window.swapchain = UniqueSwapchain(get_device()->create_swapchain(SwapChainCreateInfo(
+			viewport->PlatformHandleRaw,
+			static_cast<uint32_t>(viewport->Size.x),
+			static_cast<uint32_t>(viewport->Size.y),
+			get_device()->get_swapchain_backend_handle(old_swapchain))).get_value());
+	};
+
+	platform_io.Renderer_SwapBuffers = [](ImGuiViewport* viewport, void* render_arg)
+	{
+		swap_buffers(viewport);
+	};
+
+	platform_io.Renderer_RenderWindow = [](ImGuiViewport* viewport, void* render_arg)
+	{
+		auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
+		renderer_data->has_submitted_work = false;
+
+		if (get_device()->acquire_swapchain_texture(renderer_data->window.get_swapchain(), 
+			renderer_data->image_available_semaphore.get()) == GfxResult::Success)
+			draw_viewport(viewport);
+	};
+
+	io.Fonts->AddFontDefault();
 
 	{
 		auto result = get_device()->create_sampler(SamplerInfo());
@@ -192,109 +289,168 @@ void initialize_imgui(PlatformWindow* in_window)
 			offsetof(ImDrawVert, col)),
 	};
 	material_state.stages = shader_stages;
+
+	update_monitors();
 }
 
-void new_frame()
+void initialize_main_viewport(platform::Window& in_window, SwapchainHandle in_swapchain)
 {
+	ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+	const ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	auto* platform_data = new ViewportPlatformData;
+	auto* renderer_data = new ViewportRendererData;
+
+	platform_data->window = &in_window;
+
+	viewport->PlatformHandle = &in_window;
+	viewport->PlatformHandleRaw = in_window.get_handle();
+	viewport->PlatformUserData = platform_data;
+	viewport->RendererUserData = renderer_data;
+	renderer_data->window.swapchain = in_swapchain;
+}
+
+void update_main_viewport(platform::Window& in_window, SwapchainHandle in_swapchain)
+{
+	const auto* viewport = ImGui::GetMainViewport();
+	auto* renderer_data = reinterpret_cast<ViewportRendererData*>(viewport->RendererUserData);
+	renderer_data->window.swapchain = in_swapchain;
+}
+
+void new_frame(float in_delta_time, platform::Window& in_main_window)
+{
+	const auto platform = get_module<platform::ApplicationModule>("Application");
+
 	ImGuiIO& io = ImGui::GetIO();
-	const auto platform = get_module<ApplicationModule>("Application");
+	io.DeltaTime = in_delta_time;
 
-	const auto mouse_pos = platform->get_application().get_mouse_pos() - window->get_position();
-	io.MousePos = ImVec2(mouse_pos.x, mouse_pos.y);
-}
+	ZE_CHECK(io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable);
 
-void on_mouse_down(PlatformWindow& in_window, PlatformMouseButton in_button, const glm::ivec2& in_mouse_pos)
-{
-	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = true;
-}
+	const auto mouse_pos = platform->get_application().get_mouse_pos();
+	io.MousePos = ImVec2(static_cast<float>(mouse_pos.x), static_cast<float>(mouse_pos.y));
+	io.DisplaySize = ImVec2(static_cast<float>(in_main_window.get_width()), 
+		static_cast<float>(in_main_window.get_height()));
 
-void on_mouse_up(PlatformWindow& in_window, PlatformMouseButton in_button, const glm::ivec2& in_mouse_pos)
-{
-	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = false;
-}
-
-void on_mouse_wheel(PlatformWindow& in_window, const float in_delta, const glm::ivec2& in_mouse_pos)
-{
-	ImGui::GetIO().MouseWheel += in_delta;
-}
-
-void update_draw_data()
-{
-	if(!draw_data)
-		draw_data = ImGui::GetDrawData();
-
-	if(draw_data->TotalVtxCount == 0)
-		return;
-
-	uint64_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
-	uint64_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-
-	if(!vertex_buffer || vertex_buffer_size < vertex_size)
+	/** Acquire main window image as soon as possible */
 	{
-		vertex_buffer = UniqueBuffer(get_device()->create_buffer(
-			BufferInfo::make_vertex_buffer_cpu_visible(vertex_size).set_debug_name("ImGui Vertex Buffer")).get_value());
-		vertex_buffer_size = vertex_size;
+		auto* renderer_data = static_cast<ViewportRendererData*>(ImGui::GetMainViewport()->RendererUserData);
+		renderer_data->has_submitted_work = false;
+		get_device()->acquire_swapchain_texture(renderer_data->window.get_swapchain(),
+			renderer_data->image_available_semaphore.get());
 	}
-
-	if(!index_buffer || index_buffer_size < index_size)
-	{
-		index_buffer = UniqueBuffer(get_device()->create_buffer(
-			BufferInfo::make_index_buffer_cpu_visible(index_size).set_debug_name("ImGui Index Buffer")).get_value());
-		index_buffer_size = index_size;
-	}
-
-	/** Write to buffers */
-	auto vertex_map = get_device()->map_buffer(vertex_buffer.get());
-	auto index_map = get_device()->map_buffer(index_buffer.get());
-
-	auto vertex_data = static_cast<ImDrawVert*>(vertex_map.get_value());
-	auto index_data = static_cast<ImDrawIdx*>(index_map.get_value());
-
-	for(int i = 0; i < draw_data->CmdListsCount; i++)
-	{
-		ImDrawList* draw_list = draw_data->CmdLists[i];
-		memcpy(vertex_data, draw_list->VtxBuffer.Data, draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
-		memcpy(index_data, draw_list->IdxBuffer.Data, draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
-
-		vertex_data += draw_list->VtxBuffer.Size;
-		index_data += draw_list->IdxBuffer.Size;
-	}
-
-	get_device()->unmap_buffer(index_buffer.get());
-	get_device()->unmap_buffer(vertex_buffer.get());
-
-	/** Update global data */
-	GlobalData global_data;
-	global_data.scale = { 2.f / draw_data->DisplaySize.x, 2.f / draw_data->DisplaySize.y };
-	global_data.translate = { -1.f - draw_data->DisplayPos.x * global_data.scale.x, -1.f - draw_data->DisplayPos.y * global_data.scale.y };
-	memcpy(global_data_ubo_data, &global_data, sizeof(global_data));
 }
 
-void draw_imgui(gfx::CommandListHandle list)
+void draw_viewport(ImGuiViewport* viewport)
 {
-	update_draw_data();
-
-	ZE_CHECK(draw_data);
-
-	if(draw_data->CmdListsCount > 0)
+	auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
+	auto update_viewport_buffers = [&](ImDrawData* draw_data, ViewportDrawData& vp_draw_data)
 	{
-		get_device()->cmd_bind_pipeline_layout(list, pipeline_layout);
-		get_device()->cmd_set_render_pass_state(list, render_pass_state);
-		get_device()->cmd_set_material_state(list, material_state);
+		if (draw_data->TotalVtxCount == 0)
+			return;
 
-		get_device()->cmd_bind_ubo(list, 0, 0, global_data_ubo);
-		get_device()->cmd_bind_sampler(list, 0, 1, sampler);
+		const uint64_t vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
+		const uint64_t index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
 
-		get_device()->cmd_bind_vertex_buffer(list, vertex_buffer.get(), 0);
-		get_device()->cmd_bind_index_buffer(list, index_buffer.get(), 0, IndexType::Uint16);
+		/** Create/resize buffers */
+		if (!vp_draw_data.vertex_buffer || vp_draw_data.vertex_buffer_size < vertex_size)
+		{
+			vp_draw_data.vertex_buffer = UniqueBuffer(get_device()->create_buffer(
+				gfx::BufferInfo::make_vertex_buffer_cpu_visible(
+					vertex_size)).get_value());
+			if (!vp_draw_data.vertex_buffer)
+			{
+				ze::logger::error("Failed to create ImGui vertex buffer");
+				return;
+			}
+
+			vp_draw_data.vertex_buffer_size = vertex_size;
+		}
+
+		if (!vp_draw_data.index_buffer || vp_draw_data.index_buffer_size < index_size)
+		{
+			vp_draw_data.index_buffer = UniqueBuffer(get_device()->create_buffer(
+				gfx::BufferInfo::make_index_buffer_cpu_visible(
+					index_size)).get_value());
+			if (!vp_draw_data.index_buffer)
+			{
+				ze::logger::error("Failed to create ImGui index buffer");
+				return;
+			}
+
+			vp_draw_data.index_buffer_size = index_size;
+		}
+
+		/** Write data to both buffers */
+		auto vertex_map = get_device()->map_buffer(*vp_draw_data.vertex_buffer);
+		auto index_map = get_device()->map_buffer(*vp_draw_data.index_buffer);
+
+		auto* vertex_data = static_cast<ImDrawVert*>(vertex_map.get_value());
+		auto* index_data = static_cast<ImDrawIdx*>(index_map.get_value());
+
+		for (int i = 0; i < draw_data->CmdListsCount; i++)
+		{
+			const auto* cmd_list = draw_data->CmdLists[i];
+			memcpy(vertex_data, cmd_list->VtxBuffer.Data, cmd_list->VtxBuffer.Size * sizeof(ImDrawVert));
+			memcpy(index_data, cmd_list->IdxBuffer.Data, cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+			vertex_data += cmd_list->VtxBuffer.Size;
+			index_data += cmd_list->IdxBuffer.Size;
+		}
+
+		get_device()->unmap_buffer(*vp_draw_data.vertex_buffer);
+		get_device()->unmap_buffer(*vp_draw_data.index_buffer);
+
+		/** Global data */
+		ViewportDrawData::GlobalData global_data;
+		global_data.scale = { 2.f / draw_data->DisplaySize.x, 2.f / draw_data->DisplaySize.y };
+		global_data.translate.x = -1.f - draw_data->DisplayPos.x * global_data.scale.x;
+		global_data.translate.y = -1.f - draw_data->DisplayPos.y * global_data.scale.y;
+		vp_draw_data.global_data.update(global_data);
+	};
+
+	update_viewport_buffers(viewport->DrawData, renderer_data->draw_data);
+
+	const auto list = get_device()->allocate_cmd_list(QueueType::Gfx);
+
+	std::array clear_values = { ClearValue(ClearColorValue({0, 0, 0, 1})),
+			ClearValue(ClearDepthStencilValue(1.f, 0)) };
+	std::array color_attachments = { get_device()->get_swapchain_backbuffer_view(renderer_data->window.get_swapchain()) };
+	RenderPassInfo render_pass_info;
+	render_pass_info.render_area = Rect2D(0, 0, viewport->Size.x, viewport->Size.y);
+	render_pass_info.color_attachments = color_attachments;
+	render_pass_info.clear_attachment_flags = 1 << 0;
+	render_pass_info.store_attachment_flags = 1 << 0;
+	render_pass_info.clear_values = clear_values;
+
+	std::array color_attachments_refs = { 0Ui32 };
+	std::array subpasses = { RenderPassInfo::Subpass(color_attachments_refs,
+		{},
+		{},
+		RenderPassInfo::DepthStencilMode::ReadOnly) };
+	render_pass_info.subpasses = subpasses;
+
+	get_device()->cmd_begin_render_pass(list, render_pass_info);
+
+	get_device()->cmd_bind_pipeline_layout(list, pipeline_layout);
+	get_device()->cmd_set_render_pass_state(list, render_pass_state);
+	get_device()->cmd_set_material_state(list, material_state);
+
+	get_device()->cmd_bind_ubo(list, 0, 0, renderer_data->draw_data.global_data.get_handle());
+	get_device()->cmd_bind_sampler(list, 0, 1, sampler);
+
+	const ImDrawData* draw_data = viewport->DrawData;
+
+	if (draw_data->CmdListsCount > 0)
+	{
+		get_device()->cmd_bind_vertex_buffer(list, renderer_data->draw_data.vertex_buffer.get(), 0);
+		get_device()->cmd_bind_index_buffer(list, renderer_data->draw_data.index_buffer.get(), 0, IndexType::Uint16);
 
 		uint32_t vertex_offset = 0;
 		uint32_t index_offset = 0;
 
-		for(int32_t i = 0; i < draw_data->CmdListsCount; ++i)
+		for (int32_t i = 0; i < draw_data->CmdListsCount; ++i)
 		{
 			ImDrawList* draw_list = draw_data->CmdLists[i];
-			for(int32_t j = 0; j < draw_list->CmdBuffer.Size; ++j)
+			for (int32_t j = 0; j < draw_list->CmdBuffer.Size; ++j)
 			{
 				const ImDrawCmd& cmd = draw_list->CmdBuffer[j];
 
@@ -308,14 +464,12 @@ void draw_imgui(gfx::CommandListHandle list)
 				clip_rect.w = (cmd.ClipRect.w - clip_off.y) * clip_scale.y;
 
 				get_device()->cmd_set_scissor(list, Rect2D(
-					static_cast<int32_t>(clip_rect.x), 
+					static_cast<int32_t>(clip_rect.x),
 					static_cast<int32_t>(clip_rect.y),
 					static_cast<uint32_t>(clip_rect.z - clip_rect.x),
 					static_cast<uint32_t>(clip_rect.w - clip_rect.y)));
 
-				// TODO: Implement texture
-				ZE_CHECK(!cmd.TextureId);
-				if(!cmd.TextureId)
+				if (!cmd.TextureId)
 					get_device()->cmd_bind_texture_view(list, 0, 2, font_texture_view);
 
 				get_device()->cmd_draw_indexed(list,
@@ -330,9 +484,78 @@ void draw_imgui(gfx::CommandListHandle list)
 			index_offset += draw_list->IdxBuffer.Size;
 		}
 	}
+
+	get_device()->cmd_end_render_pass(list);
+
+	std::array wait_semaphores = { renderer_data->image_available_semaphore.get() };
+	std::array signal_semaphores = { renderer_data->render_finished_semaphore.get() };
+	get_device()->submit(list, wait_semaphores, signal_semaphores);
+	renderer_data->has_submitted_work = true;
 }
 
-void destroy_imgui()
+void swap_buffers(ImGuiViewport* viewport)
+{
+	const auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
+	if (renderer_data->has_submitted_work)
+	{
+		std::array render_finished_semaphores = { renderer_data->render_finished_semaphore.get() };
+		get_device()->present(renderer_data->window.get_swapchain(),
+			render_finished_semaphores);
+	}
+}
+
+void draw_viewports()
+{
+	draw_viewport(ImGui::GetMainViewport());
+
+	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	for(int i = 1; i < platform_io.Viewports.Size; i++)
+	{
+		ImGuiViewport* viewport = platform_io.Viewports[i];
+		if (viewport->Flags & ImGuiViewportFlags_Minimized)
+			continue;
+
+		platform_io.Renderer_RenderWindow(viewport, nullptr);
+	}
+}
+
+void present_viewports()
+{
+	/** TODO: Batch presents in one present call */
+
+	swap_buffers(ImGui::GetMainViewport());
+
+	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	for (int i = 1; i < platform_io.Viewports.Size; i++)
+	{
+		ImGuiViewport* viewport = platform_io.Viewports[i];
+		if (viewport->Flags & ImGuiViewportFlags_Minimized)
+			continue;
+
+		platform_io.Renderer_SwapBuffers(viewport, nullptr);
+	}
+}
+
+void update_monitors()
+{
+	const auto platform = get_module<platform::ApplicationModule>("Application");
+	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+	platform_io.Monitors.resize(0);
+	for (uint32_t i = 0; i < platform->get_application().get_num_monitors(); ++i)
+	{
+		const auto& monitor = platform->get_application().get_monitor_info(i);
+
+		ImGuiPlatformMonitor imgui_monitor;
+		imgui_monitor.MainPos = ImVec2(static_cast<float>(monitor.bounds.x), static_cast<float>(monitor.bounds.y));
+		imgui_monitor.MainSize = ImVec2(static_cast<float>(monitor.bounds.z), static_cast<float>(monitor.bounds.w));
+		imgui_monitor.WorkPos = ImVec2(static_cast<float>(monitor.work_bounds.x), static_cast<float>(monitor.work_bounds.y));
+		imgui_monitor.WorkSize = ImVec2(static_cast<float>(monitor.work_bounds.z), static_cast<float>(monitor.work_bounds.w));
+		imgui_monitor.DpiScale = monitor.dpi / 96.f;
+		platform_io.Monitors.push_back(imgui_monitor);
+	}
+}
+
+void destroy()
 {
 	get_device()->destroy_pipeline_layout(pipeline_layout);
 
@@ -343,12 +566,35 @@ void destroy_imgui()
 	get_device()->destroy_texture_view(font_texture_view);
 
 	get_device()->destroy_sampler(sampler);
+}
 
-	get_device()->unmap_buffer(global_data_ubo);
-	get_device()->destroy_buffer(global_data_ubo);
+void on_mouse_down(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos)
+{
+	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = true;
+}
 
-	vertex_buffer.reset();
-	index_buffer.reset();
+void on_mouse_up(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos)
+{
+	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = false;
+}
+
+void on_mouse_wheel(platform::Window& in_window, const float in_delta, const glm::ivec2& in_mouse_pos)
+{
+	ImGui::GetIO().MouseWheel += in_delta;
+}
+
+void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t in_height)
+{
+	if (ImGui::GetCurrentContext())
+	{
+		ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
+		ImGuiViewport* viewport = ImGui::GetMainViewport();
+		if (viewport->PlatformHandleRaw == in_window.get_handle())
+		{
+			platform_io.Renderer_SetWindowSize(ImGui::GetMainViewport(),
+				ImVec2(in_width, in_height));
+		}
+	}
 }
 
 }

@@ -4,13 +4,13 @@
 #include "engine/application/windows/window.hpp"
 #endif
 
-namespace ze
+namespace ze::platform
 {
 
 ApplicationModule::ApplicationModule()
 {
 #if ZE_PLATFORM(WINDOWS)
-	application = std::make_unique<WindowsPlatformApplication>(GetModuleHandle(nullptr));
+	application = std::make_unique<WindowsApplication>(GetModuleHandle(nullptr));
 #endif
 }
 

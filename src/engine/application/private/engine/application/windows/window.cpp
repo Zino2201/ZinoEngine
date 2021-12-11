@@ -1,29 +1,45 @@
 #include "engine/application/windows/window.hpp"
 #include <boost/locale.hpp>
 
-namespace ze
+namespace ze::platform
 {
 
-WindowsPlatformWindow::WindowsPlatformWindow(
-	WindowsPlatformApplication& in_application,
+WindowsWindow::WindowsWindow(
+	WindowsApplication& in_application,
 	const std::string& in_name,
 	uint32_t in_width, 
 	uint32_t in_height, 
 	uint32_t in_x,
 	uint32_t in_y, 
-	const PlatformWindowFlags& in_flags) : PlatformWindow(in_name, in_width, in_height, in_x, in_y, in_flags),
-	application(in_application), hwnd(nullptr), width(in_width), height(in_height), position(in_x, in_y)
+	const WindowFlags& in_flags) : Window(in_name, in_width, in_height, in_x, in_y, in_flags),
+	application(in_application), hwnd(nullptr), width(in_width), height(in_height), position(in_x, in_y), style(0), ex_style(0)
 {
-	DWORD ex_style = 0;
-	DWORD style = WS_OVERLAPPEDWINDOW;
+	const std::wstring wide_name = boost::locale::conv::utf_to_utf<wchar_t, char>(in_name);
+
+	if(in_flags & WindowFlagBits::Borderless)
+		style |= WS_POPUP;
+	else
+		style |= WS_OVERLAPPEDWINDOW;
+
+	/**
+	 * We need to adjust the initial rect since CreateWindowEx
+	 * width/height is the whole window size and not client area
+	 * (Only in non-bordeless)
+	 */
+	RECT initial_area = { 0, 0, width, height };
+	AdjustWindowRectEx(&initial_area,
+		style,
+		FALSE,
+		ex_style);
+
 	hwnd = ::CreateWindowEx(ex_style,
-		"ZinoEngine",
-		in_name.c_str(),
+		L"ZinoEngine",
+		wide_name.c_str(),
 		style,
 		static_cast<int32_t>(in_x),
 		static_cast<int32_t>(in_y),
-		static_cast<int32_t>(in_width),
-		static_cast<int32_t>(in_height),
+		initial_area.right - initial_area.left,
+		initial_area.bottom - initial_area.top,
 		nullptr,
 		nullptr,
 		application.get_hinstance(),
@@ -32,7 +48,7 @@ WindowsPlatformWindow::WindowsPlatformWindow(
 
 	application.register_window(this);
 
-	if(in_flags & PlatformWindowFlagBits::Centered)
+	if(in_flags & WindowFlagBits::Centered)
 	{
 		const int screen_width = GetSystemMetrics(SM_CXSCREEN);
 		const int screen_height = GetSystemMetrics(SM_CYSCREEN);
@@ -60,10 +76,10 @@ WindowsPlatformWindow::WindowsPlatformWindow(
 		position = { screen_width / 2 - client_width / 2, screen_height / 2 - client_height / 2 };
 	}
 
-	ShowWindow(hwnd, in_flags & PlatformWindowFlagBits::Maximized ? SW_MAXIMIZE : SW_SHOW);
+	ShowWindow(hwnd, in_flags & WindowFlagBits::Maximized ? SW_MAXIMIZE : SW_SHOW);
 }
 
-WindowsPlatformWindow::~WindowsPlatformWindow()
+WindowsWindow::~WindowsWindow()
 {
 	if(hwnd)
 	{
@@ -72,8 +88,50 @@ WindowsPlatformWindow::~WindowsPlatformWindow()
 	}
 }
 
+void WindowsWindow::set_title(const std::string& in_name)
+{
+	const std::wstring wide_name = boost::locale::conv::utf_to_utf<wchar_t, char>(in_name);
+	::SetWindowText(hwnd, wide_name.c_str());
+}
 
-LRESULT CALLBACK WindowsPlatformWindow::wnd_proc(uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
+void WindowsWindow::set_size(glm::ivec2 in_size)
+{
+	width = in_size.x;
+	height = in_size.y;
+
+	RECT initial_area = { 0, 0, width, height };
+	AdjustWindowRectEx(&initial_area,
+		style,
+		FALSE,
+		ex_style);
+
+	::SetWindowPos(hwnd,
+		nullptr,
+		position.x,
+		position.y,
+		initial_area.right - initial_area.left,
+		initial_area.bottom - initial_area.top,
+		0);
+}
+
+void WindowsWindow::set_position(glm::ivec2 in_position)
+{
+	position = in_position;
+	::SetWindowPos(hwnd,
+		nullptr,
+		position.x,
+		position.y,
+		width,
+		height,
+		0);
+}
+
+void WindowsWindow::show()
+{
+	::ShowWindow(hwnd, SW_SHOW);
+}
+
+LRESULT CALLBACK WindowsWindow::wnd_proc(uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
 {
 	application.wnd_proc(*this, in_msg, in_wparam, in_lparam);
 

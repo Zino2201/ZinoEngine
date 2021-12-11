@@ -81,6 +81,8 @@ inline GfxResult convert_result(VkResult in_result)
 		return GfxResult::Success;
 	case VK_TIMEOUT:
 		return GfxResult::Timeout;
+	case VK_ERROR_SURFACE_LOST_KHR:
+		return GfxResult::ErrorSurfaceLost;
 	default:
 	case VK_ERROR_UNKNOWN:
 		return GfxResult::ErrorUnknown;

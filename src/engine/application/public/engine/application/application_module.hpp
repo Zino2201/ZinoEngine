@@ -2,21 +2,20 @@
 
 #include "engine/core.hpp"
 #include "engine/module/module.hpp"
-#include "engine/application/platform_window.hpp"
 
-namespace ze
+namespace ze::platform
 {
 
-class PlatformApplication;
+class Application;
 
 class ApplicationModule : public Module
 {
 public:
 	ApplicationModule();
 
-	PlatformApplication& get_application() const { return *application.get(); }
+	Application& get_application() const { return *application.get(); }
 private:
-	std::unique_ptr<PlatformApplication> application;
+	std::unique_ptr<Application> application;
 };
 
 }

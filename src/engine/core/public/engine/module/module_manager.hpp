@@ -35,6 +35,7 @@ void unload_all_modules();
  * Returns nullptr if not found, use \load if requiring load reason error
  */
 template<typename T>
+	requires std::derived_from<T, Module>
 [[nodiscard]] T* get_module(const std::string_view& name)
 {
 	auto result = load_module(name);

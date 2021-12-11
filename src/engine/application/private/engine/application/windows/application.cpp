@@ -1,15 +1,16 @@
 #include "engine/application/windows/application.hpp"
 #include "engine/application/windows/window.hpp"
 #include "engine/application/message_handler.hpp"
+#include <ShellScalingApi.h>
 
-namespace ze
+namespace ze::platform
 {
 
 ZE_DEFINE_LOG_CATEGORY(windows_application);
 
-WindowsPlatformApplication* windows_platform_application = nullptr;
+WindowsApplication* windows_platform_application = nullptr;
 
-WindowsPlatformApplication::WindowsPlatformApplication(
+WindowsApplication::WindowsApplication(
 	HINSTANCE in_instance)
 	: message_handler(nullptr), instance(in_instance)
 {
@@ -17,15 +18,16 @@ WindowsPlatformApplication::WindowsPlatformApplication(
 
 	::CoInitialize(nullptr);
 	register_win_class();
+	update_monitors();
 }
 
-WindowsPlatformApplication::~WindowsPlatformApplication()
+WindowsApplication::~WindowsApplication()
 {
 	::CoUninitialize();
 	windows_platform_application = nullptr;
 }
 
-void WindowsPlatformApplication::register_win_class()
+void WindowsApplication::register_win_class()
 {
 	WNDCLASS wnd_class = {};
 	wnd_class.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
@@ -38,14 +40,48 @@ void WindowsPlatformApplication::register_win_class()
 			return DefWindowProc(in_hwnd, in_msg, wparam, lparam);
 		};
 	wnd_class.hInstance = instance;
-	wnd_class.lpszClassName = "ZinoEngine";
+	wnd_class.lpszClassName = L"ZinoEngine";
 
 	ZE_ASSERTF(::RegisterClass(&wnd_class), "Failed to register Windows window class!");
 }
 
-void WindowsPlatformApplication::wnd_proc(WindowsPlatformWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
+void WindowsApplication::update_monitors()
 {
-	auto convert_button = [](uint32_t in_msg) -> PlatformMouseButton
+	EnumDisplayMonitors(nullptr,
+		nullptr,
+		[](HMONITOR monitor, HDC, LPRECT, LPARAM data) -> BOOL
+		{
+			MONITORINFO win_monitor_info = { sizeof(MONITORINFO) };
+			GetMonitorInfo(monitor, &win_monitor_info);
+
+			UINT dpi_x;
+			UINT dpi_y;
+			GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpi_x, &dpi_y);
+
+			auto* app = reinterpret_cast<WindowsApplication*>(data);
+			app->monitor_infos.emplace_back(
+				glm::ivec4 {
+					win_monitor_info.rcMonitor.left,
+					win_monitor_info.rcMonitor.top,
+					win_monitor_info.rcMonitor.right - win_monitor_info.rcMonitor.left,
+					win_monitor_info.rcMonitor.bottom - win_monitor_info.rcMonitor.top,
+				},
+				glm::ivec4 {
+					win_monitor_info.rcWork.left,
+					win_monitor_info.rcWork.top,
+					win_monitor_info.rcWork.right - win_monitor_info.rcWork.left,
+					win_monitor_info.rcWork.bottom - win_monitor_info.rcWork.top,
+				},
+				dpi_x);
+
+			return TRUE;
+		},
+		reinterpret_cast<LPARAM>(this));
+}
+
+void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
+{
+	auto convert_button = [](uint32_t in_msg) -> MouseButton
 	{
 		switch(in_msg)
 		{
@@ -53,15 +89,15 @@ void WindowsPlatformApplication::wnd_proc(WindowsPlatformWindow& in_window, uint
 		case WM_LBUTTONDOWN:
 		case WM_LBUTTONUP:
 		case WM_LBUTTONDBLCLK:
-			return PlatformMouseButton::Left;
+			return MouseButton::Left;
 		case WM_MBUTTONDOWN:
 		case WM_MBUTTONUP:
 		case WM_MBUTTONDBLCLK:
-			return PlatformMouseButton::Middle;
+			return MouseButton::Middle;
 		case WM_RBUTTONDOWN:
 		case WM_RBUTTONUP:
 		case WM_RBUTTONDBLCLK:
-			return PlatformMouseButton::Right;
+			return MouseButton::Right;
 		}
 	};
 
@@ -114,17 +150,12 @@ void WindowsPlatformApplication::wnd_proc(WindowsPlatformWindow& in_window, uint
 	}
 }
 
-void WindowsPlatformApplication::register_window(WindowsPlatformWindow* window)
+void WindowsApplication::register_window(WindowsWindow* window)
 {
 	windows.emplace_back(window);
-
-	char name[512];
-	GetWindowText(window->get_hwnd(), name, sizeof(name));
-
-	logger::verbose(log_windows_application, "Registered window \"{}\"", name);
 }
 
-void WindowsPlatformApplication::unregister_window(WindowsPlatformWindow* window)
+void WindowsApplication::unregister_window(WindowsWindow* window)
 {
 	for(auto it = windows.begin(); it != windows.end(); ++it)
 	{
@@ -136,12 +167,12 @@ void WindowsPlatformApplication::unregister_window(WindowsPlatformWindow* window
 	}
 }
 
-void WindowsPlatformApplication::set_message_handler(PlatformApplicationMessageHandler* in_message_handler)
+void WindowsApplication::set_message_handler(ApplicationMessageHandler* in_message_handler)
 {
 	message_handler = in_message_handler;
 }
 
-void WindowsPlatformApplication::pump_messages()
+void WindowsApplication::pump_messages()
 {
 	MSG msg;
 	while(PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
@@ -151,14 +182,14 @@ void WindowsPlatformApplication::pump_messages()
 	}
 }
 
-std::unique_ptr<PlatformWindow> WindowsPlatformApplication::create_window(const std::string& in_name,
+std::unique_ptr<Window> WindowsApplication::create_window(const std::string& in_name,
 	uint32_t in_width,
 	uint32_t in_height,
 	uint32_t in_x,
 	uint32_t in_y,
-	const PlatformWindowFlags& in_flags)
+	const WindowFlags& in_flags)
 {
-	return std::make_unique<WindowsPlatformWindow>(*this,
+	return std::make_unique<WindowsWindow>(*this,
 		in_name,
 		in_width,
 		in_height,
@@ -167,14 +198,19 @@ std::unique_ptr<PlatformWindow> WindowsPlatformApplication::create_window(const 
 		in_flags);
 }
 
-glm::ivec2 WindowsPlatformApplication::get_mouse_pos() const
+glm::ivec2 WindowsApplication::get_mouse_pos() const
 {
 	POINT point;
 	::GetCursorPos(&point);
 	return { point.x, point.y };
 }
 
-WindowsPlatformWindow* WindowsPlatformApplication::get_window_by_hwnd(HWND in_hwnd) const
+const MonitorInfo& WindowsApplication::get_monitor_info(uint32_t in_monitor) const
+{
+	return monitor_infos[in_monitor];
+}
+
+WindowsWindow* WindowsApplication::get_window_by_hwnd(HWND in_hwnd) const
 {
 	for(const auto& window : windows)
 	{
