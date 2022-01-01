@@ -128,24 +128,25 @@ void Engine::run()
 
 	imgui::initialize_main_viewport(*main_window, swapchain.get());
 
+	auto previous = std::chrono::high_resolution_clock::now();
 	while(running)
 	{
 		platform->get_application().pump_messages();
 
 		device->new_frame();
 
-		static auto start_time = std::chrono::high_resolution_clock::now();
-		auto current_time = std::chrono::high_resolution_clock::now();
-		const float delta_time = std::chrono::duration<float, std::chrono::seconds::period>(current_time - start_time).count();
-		start_time = current_time;
+		auto current = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double, std::milli> delta_time_ms = current - previous;
+		previous = current;
 
-		imgui::new_frame(delta_time, *main_window.get());
+		const float delta_time = static_cast<float>(delta_time_ms.count()) * 0.001f;
+
+		imgui::new_frame(delta_time, *main_window);
 
 		ImGui::NewFrame();
 		ImGui::Text("%.0f FPS", 1.f / ImGui::GetIO().DeltaTime, ImGui::GetIO().DeltaTime);
 		ImGui::Text("%.2f ms", ImGui::GetIO().DeltaTime * 1000);
 		ImGui::Text("Mouse Pos: %f %f", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
-		ImGui::SetNextWindowBgAlpha(0.2f);
 		ImGui::ShowDemoWindow();
 		ImGui::Render();
 
@@ -154,6 +155,15 @@ void Engine::run()
 		device->end_frame();
 
 		imgui::present_viewports();
+
+		/** FPS Limiter */
+		{
+			using namespace std::chrono_literals;
+			constexpr std::chrono::duration<double, std::milli> min_ms(1000.0 / 60.0);
+			const auto target_sleep_time = current + min_ms;
+			std::this_thread::sleep_until(target_sleep_time - 2ms);
+			while (std::chrono::high_resolution_clock::now() < target_sleep_time) {}
+		}
 	}
 
 	device->wait_idle();

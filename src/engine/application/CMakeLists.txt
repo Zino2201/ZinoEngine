@@ -13,7 +13,7 @@ if(WIN32)
 		public/engine/application/windows/cursor.hpp
 		private/engine/application/windows/application.cpp
 		private/engine/application/windows/window.cpp)
-	target_link_libraries(application PRIVATE shcore)
+	target_link_libraries(application PRIVATE shcore windowsapp)
 endif()
 
 target_include_directories(application PUBLIC public PRIVATE private)

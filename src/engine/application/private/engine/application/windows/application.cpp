@@ -18,6 +18,7 @@ WindowsApplication::WindowsApplication(
 	windows_platform_application = this;
 
 	::CoInitialize(nullptr);
+	timeBeginPeriod(1);
 	register_win_class();
 	update_monitors();
 }
@@ -25,6 +26,7 @@ WindowsApplication::WindowsApplication(
 WindowsApplication::~WindowsApplication()
 {
 	::CoUninitialize();
+	timeEndPeriod(1);
 	windows_platform_application = nullptr;
 }
 
