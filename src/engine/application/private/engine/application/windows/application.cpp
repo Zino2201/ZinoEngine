@@ -48,6 +48,8 @@ void WindowsApplication::register_win_class()
 
 void WindowsApplication::update_monitors()
 {
+	monitor_infos.clear();
+
 	EnumDisplayMonitors(nullptr,
 		nullptr,
 		[](HMONITOR monitor, HDC, LPRECT, LPARAM data) -> BOOL
@@ -144,7 +146,8 @@ void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPA
 		}
 		case WM_MOUSEWHEEL:
 		{
-			message_handler->on_mouse_wheel(in_window, static_cast<float>(GET_WHEEL_DELTA_WPARAM(in_wparam)) / WHEEL_DELTA, get_mouse_pos());
+			message_handler->on_mouse_wheel(in_window, 
+				static_cast<float>(GET_WHEEL_DELTA_WPARAM(in_wparam)) / WHEEL_DELTA, get_mouse_pos());
 			break;
 		}
 		}

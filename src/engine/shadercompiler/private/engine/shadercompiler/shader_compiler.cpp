@@ -1,5 +1,6 @@
 #include "engine/shadercompiler/shader_compiler.hpp"
 #include <robin_hood.h>
+#include "engine/hal/thread.hpp"
 
 namespace ze::gfx
 {
@@ -28,23 +29,25 @@ void unregister_shader_compiler(const ShaderCompiler& in_compiler)
 	shader_compilers.erase(in_compiler.get_shader_language());
 }
 
-Result<ShaderCompiler*, bool> get_shader_compiler(ShaderFormat in_format)
+ShaderCompiler* get_shader_compiler(ShaderFormat in_format)
 {
 	auto it = shader_compilers.find(in_format.language);
 	if (it != shader_compilers.end())
 	{
-		return make_result((*it).second);
+		return (*it).second;
 	}
 
-	return make_error(false);
+	return nullptr;
 }
 
 ShaderCompilerOutput compile_shader(const ShaderCompilerInput& in_input)
 {
-	logger::info(log_shadercompiler, "Compiling shader {}", in_input.name);
+	logger::info(log_shadercompiler, "Compiling shader {} (thread: {})",
+		in_input.name,
+		std::hash<std::thread::id>()(std::this_thread::get_id()));
 
 	if (auto result = get_shader_compiler(in_input.target_format))
-		return result.get_value()->compile_shader(in_input);
+		return result->compile_shader(in_input);
 
 	return {};
 }

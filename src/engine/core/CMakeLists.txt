@@ -19,17 +19,25 @@ ze_add_module(core
 	public/engine/module/module_manager.hpp
 	public/engine/util/simple_pool.hpp
 	public/engine/hal/library.hpp
-	public/engine/hal/windows/library.hpp
+	public/engine/hal/thread.hpp
 	private/engine/logger/logger.cpp
 	private/engine/logger/sinks/stdout_sink.cpp
 	private/engine/module/module_manager.cpp
 	private/engine/module/module.cpp
-	private/engine/hal/windows/library.cpp
 	private/engine/core.cpp)
+
+if(WIN32)
+	target_sources(core PRIVATE
+		public/engine/hal/windows/library.hpp
+		public/engine/hal/windows/thread.hpp
+		private/engine/hal/windows/library.cpp
+		private/engine/hal/windows/thread.cpp)
+endif()
+
 target_include_directories(core PUBLIC public PRIVATE private)
 target_compile_options(core PUBLIC /GR- /W4)
 target_compile_features(core PUBLIC cxx_std_20)
-target_compile_definitions(core PUBLIC FMT_EXCEPTIONS=0 _HAS_EXCEPTIONS=0 ZE_MODULE_PREFIX="${ZE_MODULE_PREFIX}" 
+target_compile_definitions(core PUBLIC FMT_EXCEPTIONS=0 _HAS_EXCEPTIONS=0 TBB_USE_EXCEPTIONS=0 ZE_MODULE_PREFIX="${ZE_MODULE_PREFIX}" 
 	GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE NOMINMAX UNICODE D_UNICODE)
 if(ZE_MONOLITHIC)
 	target_compile_definitions(core PUBLIC ZE_MONOLITHIC=1)
@@ -42,4 +50,7 @@ if(ZE_WITH_SANITIZERS)
 endif()
 
 target_compile_definitions(core PUBLIC "$<$<CONFIG:Debug>:ZE_BUILD_PRIVATE_DEFINITION_DEBUG=1>$<$<CONFIG:RelWithDebInfo>:ZE_BUILD_PRIVATE_DEFINITION_RELWITHDEBINFO=1>$<$<CONFIG:Release>:ZE_BUILD_PRIVATE_DEFINITION_RELEASE=1>")
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+	target_compile_definitions(core PUBLIC "TBB_USE_DEBUG=1")
+endif()
 target_link_libraries(core PUBLIC robin_hood::robin_hood glm::glm fmt::fmt-header-only Boost::locale)

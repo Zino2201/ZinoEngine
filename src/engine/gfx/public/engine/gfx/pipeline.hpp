@@ -146,4 +146,25 @@ template<> struct hash<ze::gfx::PipelineShaderStage>
 	}
 };	
 
+inline std::string to_string(ze::gfx::ShaderStageFlagBits in_stage)
+{
+	switch(in_stage)
+	{
+	case ze::gfx::ShaderStageFlagBits::Vertex:
+		return "Vertex";
+	case ze::gfx::ShaderStageFlagBits::Fragment:
+		return "Fragment";
+	case ze::gfx::ShaderStageFlagBits::Compute:
+		return "Compute";
+	case ze::gfx::ShaderStageFlagBits::TessellationControl:
+		return "TessellationControl";
+	case ze::gfx::ShaderStageFlagBits::TessellationEvaluation:
+		return "TessellationEvaluation";
+	case ze::gfx::ShaderStageFlagBits::Geometry:
+		return "Geometry";
+	}
+
+	return "";
+}
+
 }

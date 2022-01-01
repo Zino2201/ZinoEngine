@@ -31,7 +31,7 @@ public:
 	T* allocate(Args&&... in_args)
 	{
 		if constexpr(ThreadSafe)
-			std::lock_guard<std::mutex> guard(mutex);
+			std::scoped_lock<std::mutex> guard(mutex);
 		
 		if(free_memory.empty())
 		{
@@ -63,7 +63,7 @@ public:
 		in_ptr->~T();
 
 		if constexpr(ThreadSafe)
-			std::lock_guard<std::mutex> guard(mutex);
+			std::scoped_lock<std::mutex> guard(mutex);
 		
 		free_memory.emplace_back(in_ptr);
 	}

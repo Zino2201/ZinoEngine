@@ -9,7 +9,8 @@
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "msvc_x64" ],
       "intelliSenseMode": "windows-msvc-x64",
-      "cmakeToolchain": "C:/Projects/ZinoEngine/src/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      "cmakeToolchain": "C:/Projects/ZinoEngine/src/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "addressSanitizerEnabled": false
     },
     {
       "name": "Release",

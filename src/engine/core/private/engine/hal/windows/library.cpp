@@ -1,6 +1,4 @@
 #include "engine/core.hpp"
-
-#if ZE_PLATFORM(WINDOWS)
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include "engine/hal/library.hpp"
@@ -24,5 +22,3 @@ void free_library(void* lib)
 }
 
 }
-
-#endif

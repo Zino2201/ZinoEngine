@@ -7,6 +7,8 @@
 #include "glm/vec2.hpp"
 #include "engine/gfx/uniform_buffer.hpp"
 
+namespace ze::shadersystem { class ShaderManager;  }
+
 namespace ze::imgui
 {
 
@@ -80,7 +82,7 @@ struct ViewportRendererData
 /**
  * Initialize ImGui renderer (create default font atlas and setup pipeline & shaders)
  */
-void initialize();
+void initialize(shadersystem::ShaderManager& in_shader_manager);
 void initialize_main_viewport(platform::Window& in_window, gfx::SwapchainHandle in_swapchain);
 void update_main_viewport(platform::Window& in_window, gfx::SwapchainHandle in_swapchain);
 void new_frame(float in_delta_time, platform::Window& in_main_window);

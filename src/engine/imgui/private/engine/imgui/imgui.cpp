@@ -3,10 +3,10 @@
 #include <dxcapi.h>
 #include <fstream>
 #include <glm/glm.hpp>
+#include "engine/shadersystem/shader_manager.hpp"
 #include "engine/application/application_module.hpp"
 #include "engine/application/platform_application.hpp"
 #include "engine/module/module_manager.hpp"
-#include "engine/shadercompiler/shader_compiler.hpp"
 
 namespace ze::imgui
 {
@@ -16,8 +16,7 @@ using namespace gfx;
 SamplerHandle sampler;
 TextureHandle font_texture;
 TextureViewHandle font_texture_view;
-ShaderHandle vertex_shader;
-ShaderHandle fragment_shader;
+std::unique_ptr<shadersystem::ShaderInstance> shader_instance;
 PipelineLayoutHandle pipeline_layout;
 std::vector<PipelineShaderStage> shader_stages;
 PipelineRenderPassState render_pass_state;
@@ -47,7 +46,7 @@ std::vector<uint8_t> read_text_file(const std::string& in_name)
 	return buffer;
 }
 
-void initialize()
+void initialize(shadersystem::ShaderManager& in_shader_manager)
 {
 	IMGUI_CHECKVERSION();
 
@@ -229,38 +228,14 @@ void initialize()
 		font_texture_view = view_result.get_value();
 	}
 
-	/** Create shaders */
+	/** Get shaders */
 	{
-		auto vertex_src = read_text_file("assets/shaders/imgui_vs.hlsl");
-		auto fragment_src = read_text_file("assets/shaders/imgui_fs.hlsl");
-
-		ShaderCompilerInput vertex_input;
-		vertex_input.name = "ImGui VS";
-		vertex_input.code = vertex_src;
-		vertex_input.entry_point = "main";
-		vertex_input.stage = ShaderStageFlagBits::Vertex;
-		vertex_input.target_format = ShaderFormat(ShaderModel::SM6_0, ShaderLanguage::VK_SPIRV);
-
-		ShaderCompilerInput fragment_input;
-		fragment_input.name = "ImGui FS";
-		fragment_input.code = fragment_src;
-		fragment_input.entry_point = "main";
-		fragment_input.stage = ShaderStageFlagBits::Fragment;
-		fragment_input.target_format = ShaderFormat(ShaderModel::SM6_0, ShaderLanguage::VK_SPIRV);
-
-		auto vert_data = gfx::compile_shader(vertex_input);
-		auto frag_data = gfx::compile_shader(fragment_input);
-
-		auto vert_result = get_device()->create_shader(ShaderInfo::make({(uint32_t*)vert_data.bytecode.data(),
-			(uint32_t*)vert_data.bytecode.data() + vert_data.bytecode.size() }));
-		auto frag_result = get_device()->create_shader(ShaderInfo::make({ (uint32_t*)frag_data.bytecode.data(),
-			(uint32_t*)frag_data.bytecode.data() + frag_data.bytecode.size() }));
-
-		vertex_shader = vert_result.get_value();
-		fragment_shader = frag_result.get_value();
-
-		shader_stages.emplace_back(ShaderStageFlagBits::Vertex, Device::get_backend_shader(vertex_shader), "main");
-		shader_stages.emplace_back(ShaderStageFlagBits::Fragment, Device::get_backend_shader(fragment_shader), "main");
+		shader_instance = in_shader_manager.get_shader("ImGui")->instantiate({});
+		const auto& shader_map = shader_instance->get_permutation().get_shader_map();
+		auto vertex_shader = shader_map.find(ShaderStageFlagBits::Vertex);
+		auto fragment_shader = shader_map.find(ShaderStageFlagBits::Fragment);
+		shader_stages.emplace_back(ShaderStageFlagBits::Vertex, Device::get_backend_shader(*vertex_shader->second), "main");
+		shader_stages.emplace_back(ShaderStageFlagBits::Fragment, Device::get_backend_shader(*fragment_shader->second), "main");
 	}
 
 	/** Create pipeline layout */
@@ -594,8 +569,7 @@ void destroy()
 
 	get_device()->destroy_pipeline_layout(pipeline_layout);
 
-	get_device()->destroy_shader(vertex_shader);
-	get_device()->destroy_shader(fragment_shader);
+	shader_instance.reset();
 
 	get_device()->destroy_texture(font_texture);
 	get_device()->destroy_texture_view(font_texture_view);

@@ -49,7 +49,7 @@ public:
 
 bool register_shader_compiler(ShaderCompiler& in_compiler);
 void unregister_shader_compiler(const ShaderCompiler& in_compiler);
-Result<ShaderCompiler*, bool> get_shader_compiler(ShaderFormat in_format);
+ShaderCompiler* get_shader_compiler(ShaderFormat in_format);
 ShaderCompilerOutput compile_shader(const ShaderCompilerInput& in_input);
 
 }

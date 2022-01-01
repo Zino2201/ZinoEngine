@@ -12,6 +12,16 @@
 #include "engine/application/application_module.hpp"
 #include "engine/application/message_handler.hpp"
 #include "engine/application/platform_application.hpp"
+#include <fstream>
+#include <iostream>
+#include "engine/shadersystem/shader_manager.hpp"
+#include "engine/filesystem/filesystem_module.hpp"
+#include "engine/filesystem/filesystem.hpp"
+#include "engine/filesystem/std_mount_point.hpp"
+#include "engine/hal/thread.hpp"
+#include "tbb/task_group.h"
+#include "engine/jobsystem/jobsystem.hpp"
+#include "engine/jobsystem/job.hpp"
 
 int main()
 {
@@ -21,10 +31,16 @@ int main()
 	logger::add_sink(std::make_unique<logger::StdoutSink>());
 
 	{
-
 	const boost::locale::generator generator;
 	const std::locale locale = generator.generate("");
 	std::locale::global(locale);
+
+	auto& filesystem = get_module<filesystem::Module>("FileSystem")->get_filesystem();
+	filesystem.mount(std::make_unique<filesystem::StdMountPoint>(std::filesystem::current_path(), "main"));
+
+	hal::set_thread_name(std::this_thread::get_id(), "Main Thread");
+
+	jobsystem::initialize();
 
 	auto platform = get_module<platform::ApplicationModule>("Application");
 
@@ -96,6 +112,10 @@ int main()
 
 	auto device = std::make_unique<gfx::Device>(*result.get_value().get(), std::move(backend_device.get_value()));
 
+	shadersystem::ShaderManager shader_manager(*device);
+	shader_manager.set_shader_format(gfx::ShaderFormat(gfx::ShaderModel::SM6_0, result.get_value()->get_shader_language()));
+	shader_manager.add_shader_directory("assets/shaders");
+
 	using namespace gfx;
 
 	UniqueSwapchain swapchain(device->create_swapchain(gfx::SwapChainCreateInfo(
@@ -154,7 +174,7 @@ int main()
 	float cam_pitch = 0.f, cam_yaw = 0.f;
 
 	ImGui::SetCurrentContext(ImGui::CreateContext());
-	imgui::initialize();
+	imgui::initialize(shader_manager);
 	imgui::initialize_main_viewport(*win.get(), swapchain.get());
 
 	while (s.running)
@@ -176,7 +196,7 @@ int main()
 			std::to_string(result.get_value()->get_shader_language()).c_str());
 		ImGui::Text("%.0f FPS", 1.f / ImGui::GetIO().DeltaTime, ImGui::GetIO().DeltaTime);
 		ImGui::Text("%.2f ms", ImGui::GetIO().DeltaTime * 1000);
-		ImGui::Text("Mouse Pos: %f %f 😳", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
+		ImGui::Text("Mouse Pos: %f %f", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
 		ImGui::SetNextWindowBgAlpha(0.2f);
 		ImGui::ShowDemoWindow();
 		ImGui::Render();

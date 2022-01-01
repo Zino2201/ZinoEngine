@@ -20,3 +20,31 @@ enum class GfxResult
 };
 
 }
+
+namespace std
+{
+
+inline std::string to_string(const ze::gfx::GfxResult& in_result)
+{
+	switch(in_result)
+	{
+	case ze::gfx::GfxResult::Success:
+		return "Success";
+	case ze::gfx::GfxResult::Timeout:
+		return "Timeout";
+	case ze::gfx::GfxResult::ErrorUnknown:
+		return "ErrorUnknown";
+	case ze::gfx::GfxResult::ErrorOutOfDeviceMemory:
+		return "ErrorOutOfDeviceMemory";
+	case ze::gfx::GfxResult::ErrorOutOfHostMemory:
+		return "ErrorOutOfHostMemory";
+	case ze::gfx::GfxResult::ErrorInvalidParameter:
+		return "ErrorInvalidParameter";
+	case ze::gfx::GfxResult::ErrorInitializationFailed:
+		return "ErrorInitializationFailed";
+	case ze::gfx::GfxResult::ErrorSurfaceLost:
+		return "ErrorSurfaceLost";
+	}
+}
+
+}

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "engine/platform_macros.hpp"
-#include "engine/logger/Logger.hpp"
+#include "engine/logger/logger.hpp"
 
 /** Portable __debugbreak */
 #if ZE_COMPILER(MSVC)
@@ -29,7 +29,7 @@
 #define ZE_CHECKF(condition, msg, ...) if(!(condition)) { logger::error("{} (File: {}, Line: {})", fmt::format(msg, __VA_ARGS__), __FILE__, __LINE__); ZE_DEBUGBREAK(); }
 #define ZE_UNREACHABLE() ZE_CHECKF(true, "Reached unreacheable code!"); std::abort();
 #else
-#define ZE_CHECK(condition)
-#define ZE_CHECKF(condition, msg, ...)
+#define ZE_CHECK(condition) condition;
+#define ZE_CHECKF(condition, msg, ...) condition;
 #define ZE_UNREACHABLE() std::abort();
 #endif
