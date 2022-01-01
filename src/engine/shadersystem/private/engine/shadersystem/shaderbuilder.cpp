@@ -17,6 +17,8 @@ ShaderDeclaration build_lua_shader(const std::string& in_code)
 	ShaderDeclaration shader_declaration;
 	ShaderStage* current_stage = nullptr;
 
+	uint32_t current_binding = 0;
+
 	/** Setup shaderbuilder table */
 	{
 		auto table = state["shaderbuilder"].get_or_create<sol::table>();
@@ -58,7 +60,9 @@ ShaderDeclaration build_lua_shader(const std::string& in_code)
 
 			shader_declaration.parameters.emplace_back(ShaderParameter::get_type_from_string(type), 
 				name,
-				stages);
+				stages,
+				0,
+				current_binding++);
 		});
 
 

@@ -92,7 +92,7 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 		viewport->PlatformHandleRaw = platform_data->get_window()->get_handle();
 	};
 
-	platform_io.Platform_GetWindowSize = [](ImGuiViewport* viewport) -> ImVec2
+	platform_io.Platform_GetWindowSize = [](ImGuiViewport*) -> ImVec2
 	{
 		const auto* platform_data = new ViewportPlatformData;
 		return
@@ -162,7 +162,7 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 		viewport->RendererUserData = nullptr;
 	};
 
-	platform_io.Renderer_SetWindowSize = [](ImGuiViewport* viewport, ImVec2 size)
+	platform_io.Renderer_SetWindowSize = [](ImGuiViewport* viewport, ImVec2)
 	{
 		if (viewport == ImGui::GetMainViewport())
 			return;
@@ -179,12 +179,12 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 			get_device()->get_swapchain_backend_handle(old_swapchain.get()))).get_value());
 	};
 
-	platform_io.Renderer_SwapBuffers = [](ImGuiViewport* viewport, void* render_arg)
+	platform_io.Renderer_SwapBuffers = [](ImGuiViewport* viewport, void*)
 	{
 		swap_buffers(viewport);
 	};
 
-	platform_io.Renderer_RenderWindow = [](ImGuiViewport* viewport, void* render_arg)
+	platform_io.Renderer_RenderWindow = [](ImGuiViewport* viewport, void*)
 	{
 		auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
 		renderer_data->has_submitted_work = false;
@@ -306,7 +306,7 @@ void initialize_main_viewport(platform::Window& in_window, SwapchainHandle in_sw
 	renderer_data->window.swapchain = in_swapchain;
 }
 
-void update_main_viewport(platform::Window& in_window, SwapchainHandle in_swapchain)
+void update_main_viewport(platform::Window&, SwapchainHandle in_swapchain)
 {
 	const auto* viewport = ImGui::GetMainViewport();
 	auto* renderer_data = reinterpret_cast<ViewportRendererData*>(viewport->RendererUserData);
@@ -423,7 +423,8 @@ void draw_viewport(ImGuiViewport* viewport)
 			ClearValue(ClearDepthStencilValue(1.f, 0)) };
 	std::array color_attachments = { get_device()->get_swapchain_backbuffer_view(renderer_data->window.get_swapchain()) };
 	RenderPassInfo render_pass_info;
-	render_pass_info.render_area = Rect2D(0, 0, viewport->Size.x, viewport->Size.y);
+	render_pass_info.render_area = Rect2D(0, 0, 
+		static_cast<uint32_t>(viewport->Size.x), static_cast<uint32_t>(viewport->Size.y));
 	render_pass_info.color_attachments = color_attachments;
 	render_pass_info.clear_attachment_flags = 1 << 0;
 	render_pass_info.store_attachment_flags = 1 << 0;
@@ -577,17 +578,17 @@ void destroy()
 	get_device()->destroy_sampler(sampler);
 }
 
-void on_mouse_down(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos)
+void on_mouse_down(platform::Window&, platform::MouseButton in_button, const glm::ivec2&)
 {
 	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = true;
 }
 
-void on_mouse_up(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos)
+void on_mouse_up(platform::Window&, platform::MouseButton in_button, const glm::ivec2&)
 {
 	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = false;
 }
 
-void on_mouse_wheel(platform::Window& in_window, const float in_delta, const glm::ivec2& in_mouse_pos)
+void on_mouse_wheel(platform::Window&, const float in_delta, const glm::ivec2&)
 {
 	ImGui::GetIO().MouseWheel += in_delta;
 }
@@ -601,7 +602,7 @@ void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t 
 		if (viewport->PlatformHandleRaw == in_window.get_handle())
 		{
 			platform_io.Renderer_SetWindowSize(ImGui::GetMainViewport(),
-				ImVec2(in_width, in_height));
+				ImVec2(static_cast<float>(in_width), static_cast<float>(in_height)));
 		}
 	}
 }

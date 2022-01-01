@@ -42,9 +42,7 @@ ShaderCompiler* get_shader_compiler(ShaderFormat in_format)
 
 ShaderCompilerOutput compile_shader(const ShaderCompilerInput& in_input)
 {
-	logger::info(log_shadercompiler, "Compiling shader {} (thread: {})",
-		in_input.name,
-		std::hash<std::thread::id>()(std::this_thread::get_id()));
+	logger::info(log_shadercompiler, "Compiling shader {}", in_input.name);
 
 	if (auto result = get_shader_compiler(in_input.target_format))
 		return result->compile_shader(in_input);

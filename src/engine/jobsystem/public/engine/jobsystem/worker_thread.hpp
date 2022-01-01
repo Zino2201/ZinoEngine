@@ -20,6 +20,7 @@ class WorkerThread
 
 public:
 	WorkerThread(size_t in_index);
+	~WorkerThread();
 
 	WorkerThread(const WorkerThread&) = delete;
 	WorkerThread& operator=(const WorkerThread&) = delete;

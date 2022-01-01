@@ -27,7 +27,7 @@ int main()
 {
 	using namespace ze;
 
-	logger::set_pattern("[{time}] [{severity}] ({category}) {message}");
+	logger::set_pattern("[{time}] [{severity}/{thread}] ({category}) {message}");
 	logger::add_sink(std::make_unique<logger::StdoutSink>());
 
 	{
@@ -214,6 +214,7 @@ int main()
 	imgui::destroy();
 	}
 
+	jobsystem::shutdown();
 	unload_all_modules();
 
 	return 0;

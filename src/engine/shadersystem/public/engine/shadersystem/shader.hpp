@@ -2,7 +2,7 @@
 
 #include "shader_declaration.hpp"
 #include <bitset>
-#include "tbb/flow_graph.h"
+#include "engine/jobsystem/job.hpp"
 
 namespace ze::shadersystem
 {
@@ -41,7 +41,7 @@ public:
 	/** Get shader map (BLOCKING !) */
 	[[nodiscard]] const ShaderMap& get_shader_map()
 	{
-		compilation_task_graph.wait_for_all();
+		while(root_compilation_job->is_running()) {}
 		return shader_map;
 	}
 
@@ -53,7 +53,7 @@ private:
 	std::atomic<ShaderPermutationState> state;
 	gfx::UniquePipelineLayout pipeline_layout;
 	ShaderMap shader_map;
-	tbb::flow::graph compilation_task_graph;
+	jobsystem::Job* root_compilation_job;
 };
 
 enum class ShaderOptionType

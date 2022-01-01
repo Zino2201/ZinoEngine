@@ -25,6 +25,12 @@ void initialize()
 	}
 }
 
+void shutdown()
+{
+	worker_threads.clear();
+	WorkerThread::get_global_sleep_var().notify_all();
+}
+
 size_t get_worker_count()
 {
 	return worker_threads.size();

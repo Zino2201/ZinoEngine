@@ -23,13 +23,17 @@ struct ShaderParameter
 	ShaderParameterType type;
 	std::string name;
 	gfx::ShaderStageFlags stages;
+	uint32_t set;
+	uint32_t binding;
 	std::vector<ShaderParameter> members;
 
 	ShaderParameter(ShaderParameterType in_type,
 		const std::string& in_name,
 		const gfx::ShaderStageFlags in_stages = gfx::ShaderStageFlags(),
+		const uint32_t in_set = 0,
+		const uint32_t in_binding = 0,
 		const std::vector<ShaderParameter> in_members = {}) : type(in_type),
-		name(in_name), stages(in_stages), members(in_members) {}
+		name(in_name), stages(in_stages), set(in_set), binding(in_binding), members(in_members) {}
 
 	static ShaderParameterType get_type_from_string(std::string in_string)
 	{

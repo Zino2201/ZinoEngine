@@ -1,7 +1,5 @@
 shader "ImGui" 
 {
-    parameter { name="texture", type=Texture2D },
-    parameter { name="texture_sampler", type=Sampler },
     parameter { name="global_data", type=UniformBuffer, members = 
         {
             { name="translate", type=float2 },    
@@ -9,6 +7,8 @@ shader "ImGui"
         },
         stages = { "vertex" }
     },
+    parameter { name="texture_sampler", type=Sampler, stages = { "fragment" } },
+    parameter { name="texture", type=Texture2D, stages = { "fragment" } },
 
     depth_stencil_state 
     {

@@ -32,7 +32,7 @@ public:
 	glm::ivec2 get_mouse_pos() const override;
 
 	/** Monitor API */
-	uint32_t get_num_monitors() const override { return monitor_infos.size(); }
+	size_t get_num_monitors() const override { return monitor_infos.size(); }
 	const MonitorInfo& get_monitor_info(uint32_t in_monitor) const override;
 
 	/** Cursor API */

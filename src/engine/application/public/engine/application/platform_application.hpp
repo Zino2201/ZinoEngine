@@ -37,7 +37,7 @@ public:
 	[[nodiscard]] virtual glm::ivec2 get_mouse_pos() const = 0;
 
 	/** Monitor API */
-	[[nodiscard]] virtual uint32_t get_num_monitors() const = 0;
+	[[nodiscard]] virtual size_t get_num_monitors() const = 0;
 	[[nodiscard]] virtual const MonitorInfo& get_monitor_info(uint32_t in_monitor) const = 0;
 
 	/** Cursor API */

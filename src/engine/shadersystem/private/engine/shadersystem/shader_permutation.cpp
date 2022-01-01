@@ -1,9 +1,8 @@
 #include "engine/shadersystem/shader.hpp"
 #include "engine/shadercompiler/shader_compiler.hpp"
-#include "tbb/parallel_invoke.h"
-#include "tbb/flow_graph.h"
-#include "engine/hal/thread.hpp"
 #include "engine/jobsystem/job.hpp"
+#include "engine/jobsystem/job_group.hpp"
+#include "tbb/concurrent_hash_map.h"
 
 namespace ze::shadersystem
 {
@@ -14,23 +13,24 @@ ShaderPermutation::ShaderPermutation(Shader& in_shader, ShaderPermutationId in_i
 void ShaderPermutation::compile()
 {
 	/** Setup input/output structure for each stage */
+	// TODO: recode all
 	struct Data
 	{
 		robin_hood::unordered_map<gfx::ShaderStageFlagBits, std::string> inputs;
 		robin_hood::unordered_map<gfx::ShaderStageFlagBits, std::string> outputs;
 		robin_hood::unordered_map<gfx::ShaderStageFlagBits, std::string> parameters;
 		robin_hood::unordered_map<gfx::ShaderStageFlagBits, std::string> main_functions;
-		std::vector<ShaderParameter> vertex_inputs;
+		std::vector<ShaderParameter> vertex_outputs;
 	};
 
 	std::shared_ptr<Data> shared_data = std::make_shared<Data>();
-
 	for(const auto& stage : shader.get_declaration().stages)
 	{
 		auto convert_type_to_hlsl_type = [](const ShaderParameterType in_type) -> std::string
 		{
 			switch (in_type)
 			{
+			default:
 			case ShaderParameterType::Float:
 				return "float";
 			case ShaderParameterType::Float2:
@@ -61,7 +61,7 @@ void ShaderPermutation::compile()
 			for (const auto& parameter : parameters)
 			{
 				std::string semantic = parameter.name == "position" ? "POSITION" : fmt::format("TEXCOORD{}", texcoord_idx++);
-				if (is_output && semantic == "POSITION")
+				if ((is_output || stage.stage == gfx::ShaderStageFlagBits::Fragment) && semantic == "POSITION")
 					semantic = "SV_POSITION";
 
 				str += fmt::format("{} {} : {};\n",
@@ -76,7 +76,7 @@ void ShaderPermutation::compile()
 		};
 
 		if (stage.stage == gfx::ShaderStageFlagBits::Vertex)
-			shared_data->vertex_inputs = stage.inputs;
+			shared_data->vertex_outputs = stage.outputs;
 
 		const std::string input_structure_name = fmt::format("{}ShaderInput", std::to_string(stage.stage));
 		const std::string output_structure_name = stage.stage == gfx::ShaderStageFlagBits::Fragment ? 
@@ -85,7 +85,7 @@ void ShaderPermutation::compile()
 		/** For fragment shader take vertex shader inputs and return float4 */
 		if (stage.stage == gfx::ShaderStageFlagBits::Fragment)
 		{
-			shared_data->inputs[stage.stage] = format_structure(shared_data->vertex_inputs, input_structure_name, false);
+			shared_data->inputs[stage.stage] = format_structure(shared_data->vertex_outputs, input_structure_name, false);
 		}
 		else
 		{
@@ -97,6 +97,7 @@ void ShaderPermutation::compile()
 		{
 			if (parameter.stages & stage.stage)
 			{
+				shared_data->parameters[stage.stage] += fmt::format("[[vk::binding({})]]\n", parameter.binding);
 				if (parameter.type == ShaderParameterType::UniformBuffer ||
 					parameter.type == ShaderParameterType::StorageBuffer)
 				{
@@ -173,68 +174,58 @@ void ShaderPermutation::compile()
 
 		input.code = { reinterpret_cast<uint8_t*>(code.data()), reinterpret_cast<uint8_t*>(code.data()) + code.size() };
 
-		return gfx::compile_shader(input);
-#if 0
-		if (output.failed)
-		{
-			logger::error(log_shadersystem, "Failed to compile shader {}:", input.name);
-			for (const auto& error : output.errors)
-				logger::log(logger::SeverityFlagBits::Error, log_shadersystem, error);
-		}
-		else
-		{
-			auto result = shader.get_shader_manager().get_device().create_shader(
-				gfx::ShaderInfo::make({ (uint32_t*) output.bytecode.data(), 
-					(uint32_t*)output.bytecode.data() + output.bytecode.size() }));
-
-			if (result)
-			{
-				shader_map[stage] = gfx::UniqueShader(result.get_value());
-				if (shader_map.size() == shader.get_declaration().stages.size())
-					state = ShaderPermutationState::Available;
-			}
-			else
-			{
-				logger::error(log_shadersystem, "Failed to create shader {}:", 
-					std::to_string(result.get_error()));
-			}
-		}
-#endif
+		return compile_shader(input);
 	};
 
-	shader_map.empty();
+	shader_map.clear();
 
-	for (const auto& stage : shader.get_declaration().stages)
-	{
-		
-	}
-
-	jobsystem::Job* parent = jobsystem::new_job(
-		[](jobsystem::Job& job)
+	root_compilation_job = new_job(
+		[&, shared_data = std::move(shared_data)](jobsystem::Job&)
 		{
-			logger::info("Parent job from {}", hal::get_thread_name(std::this_thread::get_id()));
+			jobsystem::JobGroup group;
+			tbb::concurrent_hash_map<gfx::ShaderStageFlagBits, gfx::ShaderCompilerOutput> outputs;
+
+			for (const auto& stage : shader.get_declaration().stages)
+			{
+				jobsystem::Job* stage_job = new_child_job(
+					[&, stage](jobsystem::Job&)
+					{
+						outputs.insert({ stage.stage, compile_stage(stage.stage) });
+					}, root_compilation_job, jobsystem::JobType::Normal, 0.f);
+				group.add(stage_job);
+			}
+
+			group.schedule_and_wait();
+
+			for (auto [stage, output] : outputs)
+			{
+				if(output.failed)
+				{
+					logger::error(log_shadersystem, "Shader compiling error: {}", output.errors[0]);
+				}
+				else
+				{
+					auto result = shader.get_shader_manager().get_device().create_shader(
+						gfx::ShaderInfo::make({ (uint32_t*)output.bytecode.data(),
+							(uint32_t*)output.bytecode.data() + output.bytecode.size() }));
+
+					if (result)
+					{
+						shader_map[stage] = gfx::UniqueShader(result.get_value());
+						if (shader_map.size() == shader.get_declaration().stages.size())
+							state = ShaderPermutationState::Available;
+					}
+					else
+					{
+						logger::error(log_shadersystem, "Failed to create shader {}:",
+							std::to_string(result.get_error()));
+					}
+				}
+			}
 		},
 		jobsystem::JobType::Normal, 0.f);
 
-	jobsystem::Job* parent_continuation = jobsystem::new_job(
-		[](jobsystem::Job& job)
-		{
-			logger::info("Parent continuation job from {}", hal::get_thread_name(std::this_thread::get_id()));
-		},
-		jobsystem::JobType::Normal, 0.f);
-
-	jobsystem::Job* child = jobsystem::new_child_job(
-		[](jobsystem::Job& job)
-		{
-			logger::info("Child job from {}", hal::get_thread_name(std::this_thread::get_id()));
-		}, parent,
-		jobsystem::JobType::Normal, 0.f);
-
-	parent->continuate(parent_continuation);
-	parent->schedule();
-	child->schedule();
-	parent->wait();
-	while (true) {}
+	root_compilation_job->schedule();
 }
 
 }

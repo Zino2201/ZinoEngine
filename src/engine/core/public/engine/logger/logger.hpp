@@ -5,6 +5,7 @@
 #include <thread>
 #include <string_view>
 #include <fmt/format.h>
+
 #include "engine/unused_parameters.hpp"
 
 namespace ze::logger
@@ -69,7 +70,7 @@ void verbose(const Category& in_category, const std::string_view& in_format, Arg
 #if ZE_BUILD(DEBUG)
 	logf(SeverityFlagBits::Verbose, in_category, in_format, std::forward<Args>(in_args)...);
 #else
-	UnusedParameters { in_category, in_format, in_args... };
+	UnusedParameters { in_category, in_format, in_args };
 #endif
 }
 

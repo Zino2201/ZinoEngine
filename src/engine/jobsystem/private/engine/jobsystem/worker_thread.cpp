@@ -10,9 +10,12 @@ namespace ze::jobsystem
 WorkerThread::WorkerThread(size_t in_index)
 	: index(in_index),
 	active(true),
-	thread([&] { run(); })
-{
+	thread([&] { run(); }) {}
 
+WorkerThread::~WorkerThread()
+{
+	active = false;
+	thread.detach();
 }
 
 void WorkerThread::run()

@@ -4,7 +4,9 @@
 #include <chrono>
 #include <thread>
 #include <iomanip>
+#include <mutex>
 #include <fmt/format-inl.h>
+#include "engine/hal/thread.hpp"
 #if ZE_PLATFORM(WINDOWS)
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -12,6 +14,8 @@
 
 namespace ze::logger
 {
+
+std::mutex log_mutex;
 
 namespace detail
 {
@@ -35,14 +39,15 @@ std::string severity_to_string(SeverityFlagBits in_severity)
 
 inline std::string format_message(const std::string& in_pattern, const Message& in_message)
 {
-	std::time_t time = std::chrono::system_clock::to_time_t(in_message.time);
-	std::tm* localtime = ::localtime(&time);
+	const std::time_t time = std::chrono::system_clock::to_time_t(in_message.time);
+	const std::tm* localtime = ::localtime(&time);
 
 	char time_str[128];
 	std::strftime(time_str, sizeof(time_str), "%H:%M:%S", localtime);
 
 	return fmt::format(in_pattern, fmt::arg("time", time_str),
 		fmt::arg("severity", severity_to_string(in_message.severity)),
+		fmt::arg("thread", hal::get_thread_name(in_message.thread)),
 		fmt::arg("category", in_message.category.name),
 		fmt::arg("message", in_message.message));
 }
@@ -74,6 +79,7 @@ void log(SeverityFlagBits in_severity, const Category& in_category, const std::s
 	message.category = in_category;
 	message.message = in_message;
 
+	std::scoped_lock lock(log_mutex);
 	for(const auto& sink : sinks)
 	{
 		sink->log(message);
@@ -82,7 +88,6 @@ void log(SeverityFlagBits in_severity, const Category& in_category, const std::s
 			MessageBoxA(nullptr, in_message.c_str(), "Fatal Error", MB_OK | MB_ICONERROR);
 			std::terminate();
 		}
-
 	}
 }
 	

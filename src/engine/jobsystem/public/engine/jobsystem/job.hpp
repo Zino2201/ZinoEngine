@@ -107,6 +107,7 @@ public:
 
 	float get_priority() const { return priority; }
 	bool is_finished() const { return unfinished_jobs == 0; }
+	bool is_running() const { return unfinished_jobs > 0; }
 private:
 	void finish();
 private:
@@ -146,9 +147,9 @@ Job* new_job(Job::Function in_function, JobType in_type, const float in_priority
 }
 
 template<typename Lambda>
-Job* new_job(Lambda in_lambda, Job* in_parent, JobType in_type, const float in_priority)
+Job* new_job(Lambda in_lambda, JobType in_type, const float in_priority)
 {
-	return detail::get_job_pool().allocate(in_parent, in_type, in_priority, in_lambda);
+	return detail::get_job_pool().allocate(in_lambda, in_type, in_priority);
 }
 
 inline Job* new_child_job(Job::Function in_function, Job* in_parent, JobType in_type, const float in_priority = 0.f)
@@ -166,9 +167,9 @@ Job* new_child_job(Job::Function in_function, Job* in_parent, JobType in_type, c
 }
 
 template<typename Lambda>
-Job* new_job(Lambda in_lambda, JobType in_type, const float in_priority)
+Job* new_child_job(Lambda in_lambda, Job* in_parent, JobType in_type, const float in_priority)
 {
-	return detail::get_job_pool().allocate(in_lambda, in_type, in_priority);
+	return detail::get_job_pool().allocate(in_lambda, in_parent, in_type, in_priority);
 }
 
 

@@ -28,7 +28,7 @@ WindowsWindow::WindowsWindow(
 	 * width/height is the whole window size and not client area
 	 * (Only in non-bordeless)
 	 */
-	RECT initial_area = { 0, 0, width, height };
+	RECT initial_area = { 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
 	AdjustWindowRectEx(&initial_area,
 		style,
 		FALSE,
@@ -103,7 +103,7 @@ void WindowsWindow::set_size(glm::ivec2 in_size)
 	width = in_size.x;
 	height = in_size.y;
 
-	RECT initial_area = { 0, 0, width, height };
+	RECT initial_area = { 0, 0, static_cast<LONG>(width), static_cast<LONG>(height) };
 	AdjustWindowRectEx(&initial_area,
 		style,
 		FALSE,
@@ -132,7 +132,7 @@ void WindowsWindow::set_position(glm::ivec2 in_position)
 
 void WindowsWindow::set_opacity(float in_alpha)
 {
-	SetLayeredWindowAttributes(hwnd, 0, in_alpha * 255.f, LWA_ALPHA);
+	SetLayeredWindowAttributes(hwnd, 0, static_cast<BYTE>(in_alpha * 255.f), LWA_ALPHA);
 }
 
 void WindowsWindow::show()
