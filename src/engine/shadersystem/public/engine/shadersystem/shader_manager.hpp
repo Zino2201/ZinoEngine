@@ -18,7 +18,7 @@ public:
 	 * Change the shader format
 	 * \warn This will NOT recompile all shaders, it MUST be set once before any shader loaded!
 	 */
-	[[deprecated("TODO: Set directly from device")]] void set_shader_format(const gfx::ShaderFormat in_shader_format) { shader_format = in_shader_format; }
+	void set_shader_format(const gfx::ShaderFormat in_shader_format) { shader_format = in_shader_format; }
 
 	/**
 	 * [THREAD SAFE] Add a directory (not recursive!) containing potential valid shader files

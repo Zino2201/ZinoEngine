@@ -1,6 +1,7 @@
 #pragma once
 
 #include "glm/vec2.hpp"
+#include "engine/unused_parameters.hpp"
 
 namespace ze::platform
 {
