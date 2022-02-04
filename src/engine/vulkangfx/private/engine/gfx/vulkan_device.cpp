@@ -444,6 +444,30 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_gfx_pipeline(const
 	auto ret = new_resource<VulkanPipeline>(*this, pipeline);
 	return make_result(ret.get());
 }
+
+Result<BackendDeviceResource, GfxResult> VulkanDevice::create_compute_pipeline(const ComputePipelineCreateInfo& in_create_info)
+{
+	VkComputePipelineCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	create_info.stage.stage = convert_shader_stage_bits(in_create_info.shader_stage.shader_stage);
+	create_info.stage.module = get_resource<VulkanShader>(in_create_info.shader_stage.shader)->shader_module;
+	create_info.stage.pName = in_create_info.shader_stage.entry_point;
+	create_info.basePipelineHandle = VK_NULL_HANDLE;
+	create_info.basePipelineIndex = -1;
+
+	VkPipeline pipeline = VK_NULL_HANDLE;
+	VkResult result = vkCreateComputePipelines(get_device(),
+		VK_NULL_HANDLE,
+		1,
+		&create_info,
+		nullptr,
+		&pipeline);
+	if (result != VK_SUCCESS)
+		return make_error(convert_result(result));
+
+	auto ret = new_resource<VulkanPipeline>(*this, pipeline);
+	return make_result(ret.get());
+}
 	
 Result<BackendDeviceResource, GfxResult> VulkanDevice::create_render_pass(const RenderPassCreateInfo& in_create_info)
 {
@@ -1074,6 +1098,15 @@ void VulkanDevice::cmd_bind_pipeline(const BackendDeviceResource& in_list,
 		get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
 		convert_pipeline_bind_point(in_bind_point),
 		get_resource<VulkanPipeline>(in_pipeline)->get_pipeline());
+}
+
+void VulkanDevice::cmd_dispatch(const BackendDeviceResource& in_list, const uint32_t in_x, const uint32_t in_y, const uint32_t in_z)
+{
+	vkCmdDispatch(
+		get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		in_x,
+		in_y,
+		in_z);
 }
 
 void VulkanDevice::cmd_draw(const BackendDeviceResource& in_list,

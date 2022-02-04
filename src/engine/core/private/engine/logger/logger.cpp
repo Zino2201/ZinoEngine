@@ -40,12 +40,19 @@ std::string severity_to_string(SeverityFlagBits in_severity)
 inline std::string format_message(const std::string& in_pattern, const Message& in_message)
 {
 	const std::time_t time = std::chrono::system_clock::to_time_t(in_message.time);
-	const std::tm* localtime = ::localtime(&time);
+
+#if ZE_PLATFORM(WINDOWS)
+	std::tm localtime = {};
+	::localtime_s(&localtime, &time);
+#else
+	const std::tm* localtime_ptr = ::localtime(&time);
+	std::tm localtime = *localtime_ptr;
+#endif
 
 	char time_str[128];
-	std::strftime(time_str, sizeof(time_str), "%H:%M:%S", localtime);
+	std::strftime(time_str, sizeof(time_str), "%H:%M:%S", &localtime);
 
-	return fmt::format(in_pattern, fmt::arg("time", time_str),
+	return fmt::format(fmt::runtime(in_pattern), fmt::arg("time", time_str),
 		fmt::arg("severity", severity_to_string(in_message.severity)),
 		fmt::arg("thread", hal::get_thread_name(in_message.thread)),
 		fmt::arg("category", in_message.category.name),

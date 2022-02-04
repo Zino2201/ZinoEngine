@@ -22,6 +22,7 @@
       "buildCommandArgs": "",
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "msvc_x64" ],
+      "cmakeToolchain": "C:/Projects/ZinoEngine/src/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "intelliSenseMode": "windows-msvc-x64"
     },
     {
@@ -33,6 +34,7 @@
       "cmakeCommandArgs": "",
       "buildCommandArgs": "",
       "ctestCommandArgs": "",
+      "cmakeToolchain": "C:/Projects/ZinoEngine/src/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake",
       "inheritEnvironments": [ "msvc_x64" ],
       "intelliSenseMode": "windows-msvc-x64"
     }

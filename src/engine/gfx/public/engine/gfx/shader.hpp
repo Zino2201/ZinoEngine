@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/Core.hpp"
+#include "engine/core.hpp"
 #include <span>
 
 namespace ze::gfx

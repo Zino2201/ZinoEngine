@@ -45,6 +45,8 @@ inline std::string to_string(const ze::gfx::GfxResult& in_result)
 	case ze::gfx::GfxResult::ErrorSurfaceLost:
 		return "ErrorSurfaceLost";
 	}
+
+	return "";
 }
 
 }

@@ -21,7 +21,6 @@ std::string get_thread_name(std::thread::id id)
 	return boost::locale::conv::utf_to_utf<char, wchar_t>(wide_name);
 }
 
-
 void set_thread_name(std::thread::id id, const std::string& in_name)
 {
 	const HANDLE handle = ::OpenThread(THREAD_ALL_ACCESS, false, *reinterpret_cast<DWORD*>(&id));

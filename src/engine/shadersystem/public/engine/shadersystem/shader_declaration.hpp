@@ -12,6 +12,7 @@ enum class ShaderParameterType
 	Float2,
 	Float3,
 	Float4,
+	Float4x4,
 	Texture2D,
 	Sampler,
 	UniformBuffer,
@@ -45,6 +46,8 @@ struct ShaderParameter
 			return ShaderParameterType::Float3;
 		else if (in_string == "float4")
 			return ShaderParameterType::Float4;
+		else if (in_string == "float4x4")
+			return ShaderParameterType::Float4x4;
 		else if (in_string == "Texture2D")
 			return ShaderParameterType::Texture2D;
 		else if (in_string == "Sampler")
@@ -56,16 +59,31 @@ struct ShaderParameter
 		else
 			return ShaderParameterType::Float;
 	}
+	static gfx::DescriptorType convert_shader_parameter_type(ShaderParameterType in_type)
+	{
+		switch(in_type)
+		{
+		case ShaderParameterType::UniformBuffer:
+			return gfx::DescriptorType::UniformBuffer;
+		case ShaderParameterType::Sampler:
+			return gfx::DescriptorType::Sampler;
+		case ShaderParameterType::Texture2D:
+			return gfx::DescriptorType::SampledTexture;
+		default:
+			ZE_ASSERT(false);
+		}
+
+		ZE_UNREACHABLE();
+	}
 };
 
 struct ShaderStage
 {
 	gfx::ShaderStageFlagBits stage;
-	std::vector<ShaderParameter> inputs;
-	std::vector<ShaderParameter> outputs;
-	std::string code;
+	std::string hlsl;
 
 	ShaderStage() : stage(gfx::ShaderStageFlagBits::Vertex) {}
+	ShaderStage(const gfx::ShaderStageFlagBits in_stage) : stage(in_stage) {}
 };
 
 struct ShaderDeclaration
@@ -73,7 +91,7 @@ struct ShaderDeclaration
 	std::string name;
 	gfx::PipelineDepthStencilStateCreateInfo depth_stencil_state;
 	gfx::PipelineRasterizationStateCreateInfo rasterization_state;
-	std::vector<ShaderParameter> parameters;
+	std::string common_hlsl;
 	std::vector<ShaderStage> stages;
 };
 

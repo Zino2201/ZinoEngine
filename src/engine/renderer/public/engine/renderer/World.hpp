@@ -7,6 +7,7 @@
 #include <boost/dynamic_bitset.hpp>
 #include "RenderPass.hpp"
 #include "Drawcall.hpp"
+#include "engine/containers/sparse_array.hpp"
 
 namespace ze::renderer
 {

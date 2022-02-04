@@ -201,17 +201,31 @@ public:
 		const BackendDeviceResource& in_list,
 		const QueueType& in_type,
 		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_list, in_debug_name),
-		type(in_type), render_pass(null_backend_resource), pipeline_state_dirty(false), dirty_sets_mask(0) {}
+		type(in_type), render_pass(null_backend_resource), pipeline_state_dirty(false), is_compute_shader(false), dirty_sets_mask(0) {}
 
 	void prepare_draw();
+	void prepare_compute();
 	void set_render_pass(const BackendDeviceResource& in_handle) { render_pass = in_handle; }
 	void set_pipeline_layout(const PipelineLayoutHandle& in_handle) { pipeline_layout = in_handle; pipeline_state_dirty = true; }
 	void set_render_pass_state(const PipelineRenderPassState& in_state) { render_pass_state = in_state; pipeline_state_dirty = true; }
-	void set_material_state(const PipelineMaterialState& in_state) { material_state = in_state; pipeline_state_dirty = true; }
+	void set_material_state(const PipelineMaterialState& in_state)
+	{
+		material_state = in_state;
+		pipeline_state_dirty = true;
+		is_compute_shader = false;
+	}
+
 	void set_descriptor(size_t in_set, size_t in_binding, const Descriptor& in_descriptor)
 	{
 		descriptors[in_set][in_binding] = in_descriptor;
 		dirty_sets_mask = 1 << in_set;
+	}
+
+	void set_compute_shader(PipelineShaderStage in_shader)
+	{
+		compute_shader = in_shader;
+		pipeline_state_dirty = true;
+		is_compute_shader = true;
 	}
 
 	[[nodiscard]] QueueType get_queue_type() const { return type; }
@@ -222,9 +236,11 @@ private:
 	QueueType type;
 	PipelineLayoutHandle pipeline_layout;
 	BackendDeviceResource render_pass;
+	PipelineShaderStage compute_shader;
 	PipelineRenderPassState render_pass_state;
 	PipelineMaterialState material_state;
 	bool pipeline_state_dirty;
+	bool is_compute_shader;
 	std::array<std::array<Descriptor, max_bindings>, max_descriptor_sets> descriptors;
 
 	/** Bitmask used to keep track of which descriptor sets to update */
@@ -677,6 +693,10 @@ public:
 		const uint32_t in_first_index, 
 		const int32_t in_vertex_offset, 
 		const uint32_t in_first_instance);
+	void cmd_dispatch(const CommandListHandle& in_list,
+		const uint32_t in_x,
+		const uint32_t in_y,
+		const uint32_t in_z);
 	void cmd_end_render_pass(const CommandListHandle& in_cmd_list);
 	void cmd_bind_vertex_buffer(const CommandListHandle& in_cmd_list,
 		const BufferHandle& in_buffer,
@@ -708,6 +728,7 @@ public:
 
 	/** Pipeline management */
 	void cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, const PipelineLayoutHandle& in_handle);
+	void cmd_bind_compute_shader(const CommandListHandle& in_cmd_list, const PipelineShaderStage& in_shader);
 	void cmd_set_render_pass_state(const CommandListHandle& in_cmd_list, const PipelineRenderPassState& in_state);
 	void cmd_set_material_state(const CommandListHandle& in_cmd_list, const PipelineMaterialState& in_state);
 	void cmd_set_scissor(const CommandListHandle& in_cmd_list, const Rect2D& in_scissor);
@@ -751,7 +772,8 @@ public:
 private:
 	void submit_queue(const QueueType& in_type);
 	BackendDeviceResource get_or_create_render_pass(const RenderPassCreateInfo& in_create_info);
-	BackendDeviceResource get_or_create_pipeline(const GfxPipelineCreateInfo& in_create_info);
+	BackendDeviceResource get_or_create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info);
+	BackendDeviceResource get_or_create_compute_pipeline(const ComputePipelineCreateInfo& in_create_info);
 	
 	[[nodiscard]] Frame& get_current_frame() { return frames[current_frame]; }
 private:
@@ -762,6 +784,7 @@ private:
 
 	robin_hood::unordered_map<RenderPassCreateInfo, BackendDeviceResource> render_passes;
 	robin_hood::unordered_map<GfxPipelineCreateInfo, BackendDeviceResource> gfx_pipelines;
+	robin_hood::unordered_map<ComputePipelineCreateInfo, BackendDeviceResource> compute_pipelines;
 	
 	/** Resources pools */
 	ThreadSafeSimplePool<detail::Buffer> buffers;

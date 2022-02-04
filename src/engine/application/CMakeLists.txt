@@ -1,5 +1,5 @@
 ze_add_module(application
-		public/engine/application/application_module.hpp
+	public/engine/application/application_module.hpp
 	public/engine/application/platform_window.hpp
 	public/engine/application/platform_application.hpp
 	public/engine/application/message_handler.hpp

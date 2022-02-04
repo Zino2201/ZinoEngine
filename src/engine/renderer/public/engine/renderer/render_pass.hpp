@@ -9,11 +9,11 @@ class World;
 
 enum class RenderPassType
 {
-	DepthPass = 1 << 0,
+	PrePass = 1 << 0,
 	BasePass = 1 << 1,
 	LightPass = 1 << 2,
 	ShadowPass = 1 << 3,
-	Transluency = 1 << 4,
+	Translucency = 1 << 4,
 };
 
 class RenderPass

@@ -1,0 +1,30 @@
+shader "ScatterUpload" 
+{
+    parameter { name="upload_buffer", type=ByteAddressBuffer },
+    parameter { name="upload_size", type=int },
+    parameter { name="data_size", type=int },
+   
+    parameter { name="destination_buffer", type="StructuredBuffer<uint>" },
+
+    stage "compute"
+    {
+        numthreads(64, 1, 1),
+
+        output
+        {
+            { name="color", type=float4 }
+        },
+
+        code 
+        [[ 
+            uint start_index = dispatch_thread_id / size;
+            uint start_offset = dispatch_thread_id - start_index * size;
+
+            /** Read destination index */
+            uint dst_index = upload_buffer.Load(start_index * 4);
+            //uint src_index = dispatch_thread_index;
+
+            destination_buffer.Store(dst_index, 2201);
+        ]]
+    }
+}

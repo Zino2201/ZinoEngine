@@ -14,7 +14,8 @@ class ShaderCompilerModule : public Module
 public:
 	ShaderCompilerModule()
 	{
-		ZE_CHECKF(register_shader_compiler(compiler), "Target shader language already registered with another shader compiler");
+		if(!register_shader_compiler(compiler))
+			logger::fatal("Target shader language already registered with another shader compiler");
 	}
 
 	~ShaderCompilerModule() override

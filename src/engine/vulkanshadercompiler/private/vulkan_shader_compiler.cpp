@@ -4,6 +4,7 @@
 #include <boost/locale.hpp>
 #include <Unknwn.h>
 #include <dxcapi.h>
+#include <spirv_cross/spirv_cross.hpp>
 
 namespace ze::gfx
 {
@@ -134,6 +135,38 @@ public:
 				static_cast<uint8_t*>(bytecode->GetBufferPointer()),
 				static_cast<uint8_t*>(bytecode->GetBufferPointer()) + bytecode->GetBufferSize()
 			};
+
+			const spirv_cross::Compiler spv_compiler(reinterpret_cast<uint32_t*>(output.bytecode.data()), 
+				output.bytecode.size() / sizeof(uint32_t));
+
+			const auto resources = spv_compiler.get_shader_resources();
+			for(const auto& ubo : resources.uniform_buffers)
+			{
+				output.reflection_data.resources.push_back({ spv_compiler.get_name(ubo.id),
+					ShaderReflectionResourceType::UniformBuffer,
+					spv_compiler.get_decoration(ubo.id, spv::DecorationDescriptorSet),
+					spv_compiler.get_decoration(ubo.id, spv::DecorationBinding),
+					1});
+			}
+
+			for (const auto& tex : resources.separate_images)
+			{
+				ZE_CHECKF(spv_compiler.get_type(tex.base_type_id).image.dim == spv::Dim2D, "Tex2D only");
+				output.reflection_data.resources.push_back({ spv_compiler.get_name(tex.id),
+					ShaderReflectionResourceType::Texture2D,
+					spv_compiler.get_decoration(tex.id, spv::DecorationDescriptorSet),
+					spv_compiler.get_decoration(tex.id, spv::DecorationBinding),
+					1 });
+			}
+
+			for (const auto& sampler : resources.separate_samplers)
+			{
+				output.reflection_data.resources.push_back({ spv_compiler.get_name(sampler.id),
+					ShaderReflectionResourceType::Sampler,
+					spv_compiler.get_decoration(sampler.id, spv::DecorationDescriptorSet),
+					spv_compiler.get_decoration(sampler.id, spv::DecorationBinding),
+					1 });
+			}
 		}
 		else
 		{
@@ -144,7 +177,7 @@ public:
 		return output;
 	}
 
-	[[nodiscard]] std::string_view get_name() const override { return "Vulkan"; }
+	[[nodiscard]] std::string_view get_name() const override { return "Vulkan (DXC)"; }
 	[[nodiscard]] ShaderLanguage get_shader_language() const override { return ShaderLanguage::VK_SPIRV; }
 private:
 	[[nodiscard]] std::wstring convert_string(const std::string& str) const

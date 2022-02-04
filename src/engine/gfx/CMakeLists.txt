@@ -12,6 +12,7 @@ ze_add_module(gfx
 	public/engine/gfx/pipeline.hpp
 	public/engine/gfx/pipeline_layout.hpp
 	public/engine/gfx/gfx_pipeline.hpp
+	public/engine/gfx/compute_pipeline.hpp
 	public/engine/gfx/render_pass.hpp
 	public/engine/gfx/device_resource.hpp
 	public/engine/gfx/sampler.hpp

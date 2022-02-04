@@ -21,11 +21,33 @@ struct ShaderCompilerInput
 	ShaderCompilerInput() = default;
 };
 
+enum class ShaderReflectionResourceType
+{
+	UniformBuffer,
+	Texture2D,
+	Sampler,
+};
+
+struct ShaderReflectionResource
+{
+	std::string name;
+	ShaderReflectionResourceType type;
+	uint32_t set;
+	uint32_t binding;
+	uint32_t count;
+};
+
+struct ShaderReflectionData
+{
+	std::vector<ShaderReflectionResource> resources;
+};
+
 struct ShaderCompilerOutput
 {
 	bool failed;
 	std::vector<uint8_t> bytecode;
 	std::vector<std::string> errors;
+	ShaderReflectionData reflection_data;
 
 	ShaderCompilerOutput() : failed(true) {}
 };

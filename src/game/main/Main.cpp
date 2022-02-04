@@ -14,6 +14,8 @@ int main()
 {
 	using namespace ze;
 
+	hal::set_thread_name(std::this_thread::get_id(), "Main Thread");
+
 	logger::set_pattern("[{time}] [{severity}/{thread}] ({category}) {message}");
 	logger::add_sink(std::make_unique<logger::StdoutSink>());
 
@@ -23,8 +25,6 @@ int main()
 
 	auto& filesystem = get_module<filesystem::Module>("FileSystem")->get_filesystem();
 	filesystem.mount(std::make_unique<filesystem::StdMountPoint>(std::filesystem::current_path(), "main"));
-
-	hal::set_thread_name(std::this_thread::get_id(), "Main Thread");
 
 	jobsystem::initialize();
 

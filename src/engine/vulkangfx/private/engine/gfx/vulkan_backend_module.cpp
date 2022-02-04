@@ -9,7 +9,7 @@ namespace ze::gfx
 
 VulkanBackendModule::VulkanBackendModule()
 {
-	ZE_CHECK(load_module("VulkanShaderCompiler").has_value());
+	load_module("VulkanShaderCompiler");
 }
 
 Result<std::unique_ptr<Backend>, std::string> VulkanBackendModule::create_vulkan_backend(const BackendFlags& in_flags)

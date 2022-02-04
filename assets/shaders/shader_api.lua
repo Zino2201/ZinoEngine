@@ -4,6 +4,7 @@
 float2 = "float2"
 float3 = "float3"
 float4 = "float4"
+float4x4 = "float4x4"
 Texture2D = "Texture2D"
 Sampler = "Sampler"
 UniformBuffer = "UniformBuffer"
@@ -14,6 +15,7 @@ ParameterTypes =
 {
     float2 = float2,
     float3 = float3,
+    float4x4 = float4x4,
     Texture2D = Texture2D,
     Sampler = Sampler,
     UniformBuffer = UniformBuffer,

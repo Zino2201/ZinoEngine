@@ -44,6 +44,7 @@ void WindowsApplication::register_win_class()
 		};
 	wnd_class.hInstance = instance;
 	wnd_class.lpszClassName = L"ZinoEngine";
+	wnd_class.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
 
 	ZE_ASSERTF(::RegisterClass(&wnd_class), "Failed to register Windows window class!");
 }
@@ -77,14 +78,14 @@ void WindowsApplication::update_monitors()
 					win_monitor_info.rcWork.right - win_monitor_info.rcWork.left,
 					win_monitor_info.rcWork.bottom - win_monitor_info.rcWork.top,
 				},
-				dpi_x);
+				static_cast<float>(dpi_x));
 
 			return TRUE;
 		},
 		reinterpret_cast<LPARAM>(this));
 }
 
-void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
+void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM)
 {
 	auto convert_button = [](uint32_t in_msg) -> MouseButton
 	{

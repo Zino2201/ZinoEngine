@@ -4,8 +4,8 @@
 #include <chrono>
 #include <thread>
 #include <string_view>
+#include <string>
 #include <fmt/format.h>
-
 #include "engine/unused_parameters.hpp"
 
 namespace ze::logger
@@ -59,29 +59,29 @@ ZE_DEFINE_LOG_CATEGORY(unknown);
 
 template<typename... Args>
 void logf(SeverityFlagBits in_severity, const Category& in_category,
-	const std::string_view& in_format, Args&&... in_args)
+	const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	log(in_severity, in_category, fmt::format(in_format, std::forward<Args>(in_args)...));
 }
 
 template<typename... Args>
-void verbose(const Category& in_category, const std::string_view& in_format, Args&&... in_args)
+void verbose(const Category& in_category, const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 #if ZE_BUILD(DEBUG)
 	logf(SeverityFlagBits::Verbose, in_category, in_format, std::forward<Args>(in_args)...);
 #else
-	UnusedParameters { in_category, in_format, in_args };
+	UnusedParameters { in_category, in_format, in_args... };
 #endif
 }
 
 template<typename... Args>
-void verbose(const std::string_view& in_format, Args&&... in_args)
+void verbose(const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	verbose(log_unknown, in_format, std::forward<Args>(in_args)...);
 }
 
 template<typename... Args>
-void info(const Category& in_category, const std::string_view& in_format, Args&&... in_args)
+void info(const Category& in_category, const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	logf(SeverityFlagBits::Info, in_category, in_format, std::forward<Args>(in_args)...);
 }
@@ -93,7 +93,7 @@ void info(const std::string_view& in_format, Args&&... in_args)
 }
 
 template<typename... Args>
-void warn(const Category& in_category, const std::string_view& in_format, Args&&... in_args)
+void warn(const Category& in_category, const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	logf(SeverityFlagBits::Warn, in_category, in_format, std::forward<Args>(in_args)...);
 }
@@ -105,25 +105,25 @@ void warn(const std::string_view& in_format, Args&&... in_args)
 }
 
 template<typename... Args>
-void error(const Category& in_category, const std::string_view& in_format, Args&&... in_args)
+void error(const Category& in_category, const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	logf(SeverityFlagBits::Error, in_category, in_format, std::forward<Args>(in_args)...);
 }
 
 template<typename... Args>
-void error(const std::string_view& in_format, Args&&... in_args)
+void error(const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	error(log_unknown, in_format, std::forward<Args>(in_args)...);
 }
 
 template<typename... Args>
-void fatal(const Category& in_category, const std::string_view& in_format, Args&&... in_args)
+void fatal(const Category& in_category, const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	logf(SeverityFlagBits::Fatal, in_category, in_format, std::forward<Args>(in_args)...);
 }
 
 template<typename... Args>
-void fatal(const std::string_view& in_format, Args&&... in_args)
+void fatal(const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	fatal(log_unknown, in_format, std::forward<Args>(in_args)...);
 }

@@ -1,0 +1,14 @@
+-- shader
+options
+{
+	{ name="deferred", type=bool },
+	{ name="emissive", type=bool },
+	{ name="transparency", type=bool },
+}
+
+--- mat
+
+shader { name="test", options = { { name="deferred", value=1 } } }
+
+default_pass { shader { name="test"} }
+pass "prepass" { shader { name="test" } }

@@ -1,0 +1,3282 @@
+/*
+See LICENSE file in root folder
+*/
+#include "HlslHelpers.hpp"
+
+#include "HlslShader.hpp"
+#include "HlslExprAdapter.hpp"
+
+#include <ShaderAST/Expr/ExprArrayAccess.hpp>
+#include <ShaderAST/Expr/ExprIdentifier.hpp>
+#include <ShaderAST/Expr/ExprLiteral.hpp>
+#include <ShaderAST/Expr/ExprMbrSelect.hpp>
+#include <ShaderAST/Stmt/StmtInputComputeLayout.hpp>
+#include <ShaderAST/Stmt/StmtReturn.hpp>
+#include <ShaderAST/Stmt/StmtSimple.hpp>
+#include <ShaderAST/Stmt/StmtStructureDecl.hpp>
+#include <ShaderAST/Type/TypeGeometryIO.hpp>
+#include <ShaderAST/Type/TypeImage.hpp>
+#include <ShaderAST/Type/TypeSampler.hpp>
+#include <ShaderAST/Visitors/CloneExpr.hpp>
+#include <ShaderAST/Visitors/GetExprName.hpp>
+
+#include <stdexcept>
+
+namespace hlsl
+{
+	namespace
+	{
+		std::string getTypeName( ast::type::ImagePtr type )
+		{
+			std::string result;
+			auto & config = type->getConfig();
+
+			if ( config.isSampled != ast::type::Trinary::eTrue )
+			{
+				result += "RW";
+
+				if ( config.dimension == ast::type::ImageDim::eBuffer )
+				{
+					result += "Buffer";
+				}
+				else if ( config.dimension == ast::type::ImageDim::eCube )
+				{
+					result += "Texture2DArray";
+				}
+				else
+				{
+					result += "Texture2D";
+
+					if ( config.isArrayed )
+					{
+						result += "Array";
+					}
+				}
+			}
+			else
+			{
+				if ( config.dimension == ast::type::ImageDim::eBuffer )
+				{
+					result += "Buffer";
+				}
+				else
+				{
+					result += "Texture2D";
+				}
+
+				if ( config.isArrayed )
+				{
+					result += "Array";
+				}
+			}
+
+			result += "<" + hlsl::getSampledName( config.format ) + ">";
+			return result;
+		}
+
+		std::string getTypeName( ast::type::SamplerPtr type )
+		{
+			std::string result;
+
+			if ( type->isComparison() )
+			{
+				result = "SamplerComparisonState";
+			}
+			else
+			{
+				result = "SamplerState";
+			}
+
+			return result;
+		}
+
+		bool isHighFreq( ast::Builtin builtin
+			, bool isInput )
+		{
+			switch ( builtin )
+			{
+			case ast::Builtin::eNone:
+			case ast::Builtin::ePosition:
+			case ast::Builtin::ePointSize:
+			case ast::Builtin::eClipDistance:
+			case ast::Builtin::eCullDistance:
+			case ast::Builtin::eTessLevelInner:
+			case ast::Builtin::eTessLevelOuter:
+				return true;
+			case ast::Builtin::eLayer:
+			case ast::Builtin::eViewportIndex:
+			case ast::Builtin::ePrimitiveID:
+				return !isInput;
+			default:
+				return false;
+			}
+		}
+
+		bool isShaderInput( ast::Builtin builtin
+			, ast::ShaderStage type )
+		{
+			return
+				( type == ast::ShaderStage::eCompute
+					&& ( builtin == ast::Builtin::eNumWorkGroups
+						|| builtin == ast::Builtin::eWorkGroupID
+						|| builtin == ast::Builtin::eLocalInvocationID
+						|| builtin == ast::Builtin::eGlobalInvocationID
+						|| builtin == ast::Builtin::eLocalInvocationIndex ) )
+				|| ( type == ast::ShaderStage::eFragment
+					&& ( builtin == ast::Builtin::eFragCoord
+						|| builtin == ast::Builtin::eFrontFacing
+						|| builtin == ast::Builtin::ePointCoord
+						|| builtin == ast::Builtin::eSampleID
+						|| builtin == ast::Builtin::eSamplePosition
+						|| builtin == ast::Builtin::eSampleMaskIn
+						|| builtin == ast::Builtin::eClipDistance
+						|| builtin == ast::Builtin::ePrimitiveID
+						|| builtin == ast::Builtin::eLayer
+						|| builtin == ast::Builtin::eViewportIndex ) )
+				|| ( type == ast::ShaderStage::eGeometry
+					&& ( builtin == ast::Builtin::ePosition
+						|| builtin == ast::Builtin::ePointSize
+						|| builtin == ast::Builtin::eClipDistance
+						|| builtin == ast::Builtin::ePrimitiveIDIn
+						|| builtin == ast::Builtin::eInvocationID ) )
+				|| ( type == ast::ShaderStage::eTessellationControl
+					&& ( builtin == ast::Builtin::ePosition
+						|| builtin == ast::Builtin::ePointSize
+						|| builtin == ast::Builtin::eClipDistance
+						|| builtin == ast::Builtin::ePatchVerticesIn
+						|| builtin == ast::Builtin::ePrimitiveID
+						|| builtin == ast::Builtin::eInvocationID ) )
+				|| ( type == ast::ShaderStage::eTessellationEvaluation
+					&& ( builtin == ast::Builtin::ePosition
+						|| builtin == ast::Builtin::ePointSize
+						|| builtin == ast::Builtin::eClipDistance
+						|| builtin == ast::Builtin::eTessCoord
+						|| builtin == ast::Builtin::ePatchVerticesIn
+						|| builtin == ast::Builtin::ePrimitiveID
+						|| builtin == ast::Builtin::eTessLevelInner
+						|| builtin == ast::Builtin::eTessLevelOuter ) )
+				|| ( type == ast::ShaderStage::eVertex
+					&& ( builtin == ast::Builtin::eVertexIndex
+						|| builtin == ast::Builtin::eInstanceIndex
+						|| builtin == ast::Builtin::eDrawIndex
+						|| builtin == ast::Builtin::eBaseVertex
+						|| builtin == ast::Builtin::eBaseInstance
+						|| builtin == ast::Builtin::eTessLevelOuter ) );
+		}
+
+		bool isShaderOutput( ast::Builtin builtin
+			, ast::ShaderStage type )
+		{
+			return
+				( type == ast::ShaderStage::eFragment
+					&& ( builtin == ast::Builtin::eFragDepth
+						|| builtin == ast::Builtin::eSampleMask
+						|| builtin == ast::Builtin::eFragStencilRefEXT ) )
+				|| ( type == ast::ShaderStage::eGeometry
+					&& ( builtin == ast::Builtin::ePosition
+						|| builtin == ast::Builtin::ePointSize
+						|| builtin == ast::Builtin::eClipDistance
+						|| builtin == ast::Builtin::eCullDistance
+						|| builtin == ast::Builtin::ePrimitiveID
+						|| builtin == ast::Builtin::eLayer
+						|| builtin == ast::Builtin::eViewportIndex ) )
+				|| ( type == ast::ShaderStage::eTessellationControl
+					&& ( builtin == ast::Builtin::ePosition
+						|| builtin == ast::Builtin::ePointSize
+						|| builtin == ast::Builtin::eClipDistance
+						|| builtin == ast::Builtin::eCullDistance
+						|| builtin == ast::Builtin::eTessLevelInner
+						|| builtin == ast::Builtin::eTessLevelOuter ) )
+				|| ( type == ast::ShaderStage::eTessellationEvaluation
+					&& ( builtin == ast::Builtin::ePosition
+						|| builtin == ast::Builtin::ePointSize
+						|| builtin == ast::Builtin::eClipDistance ) )
+				|| ( type == ast::ShaderStage::eVertex
+					&& ( builtin == ast::Builtin::ePosition
+						|| builtin == ast::Builtin::ePointSize
+						|| builtin == ast::Builtin::eClipDistance
+						|| builtin == ast::Builtin::eCullDistance ) );
+		}
+
+		ast::type::TypePtr getNonNull( ast::type::TypePtr const & lhs
+			, ast::type::TypePtr const & rhs )
+		{
+			return lhs ? lhs : rhs;
+		}
+
+		bool needsSeparateFunc( ast::ShaderStage stage
+			, bool isMain )
+		{
+			return false;/* stage == ast::ShaderStage::eFragment
+				|| stage == ast::ShaderStage::eVertex
+				|| ( stage == ast::ShaderStage::eTessellationControl && !isMain )
+				|| stage == ast::ShaderStage::eTessellationEvaluation;*/
+		}
+
+		bool needsSeparate( IOMappingMode mode )
+		{
+			return mode != IOMappingMode::eNoSeparate
+				&& mode != IOMappingMode::eNoSeparateDistinctParams
+				&& mode != IOMappingMode::eLocalReturn;
+		}
+
+		IOMappingMode getMode( ast::ShaderStage stage
+			, bool isMain
+			, bool isInput
+			, bool isHighFreq )
+		{
+			if ( !isHighFreq )
+			{
+				return IOMappingMode::eNoSeparateDistinctParams;
+			}
+
+			if ( needsSeparateFunc( stage, isMain ) )
+			{
+				return IOMappingMode::eGlobalSeparateVar;
+			}
+
+			if ( stage == ast::ShaderStage::eGeometry
+				&& !isInput )
+			{
+				return IOMappingMode::eLocalSeparateVar;
+			}
+
+			if ( stage == ast::ShaderStage::eTessellationControl
+				&& !isInput )
+			{
+				return IOMappingMode::eLocalReturn;
+			}
+
+			if ( stage == ast::ShaderStage::eTessellationEvaluation
+				&& !isInput )
+			{
+				return IOMappingMode::eLocalReturn;
+			}
+
+			return IOMappingMode::eNoSeparate;
+		}
+
+		void declareStruct( ast::stmt::Container & stmt
+			, ast::type::StructPtr const & structType
+			, std::unordered_set< ast::type::StructPtr > & declaredStructs )
+		{
+			if ( declaredStructs.emplace( structType ).second )
+			{
+				stmt.addStmt( ast::stmt::makeStructureDecl( structType ) );
+			}
+		}
+
+		std::string getFuncName( bool isMain )
+		{
+			return ( isMain
+				? std::string{ "Main" }
+			: std::string{ "" } );
+		}
+
+		bool isSupported( ast::Builtin builtin
+			, ast::ShaderStage stage
+			, bool isInput )
+		{
+			switch ( builtin )
+			{
+			case ast::Builtin::eLocalInvocationID:
+			case ast::Builtin::eLocalInvocationIndex:
+			case ast::Builtin::eWorkGroupID:
+			case ast::Builtin::eTessCoord:
+			case ast::Builtin::eGlobalInvocationID:
+			case ast::Builtin::eFragDepth:
+			case ast::Builtin::eSampleMask:
+			case ast::Builtin::eSampleMaskIn:
+			case ast::Builtin::eCullDistance:
+			case ast::Builtin::eClipDistance:
+			case ast::Builtin::eTessLevelInner:
+			case ast::Builtin::eInstanceIndex:
+			case ast::Builtin::eFrontFacing:
+			case ast::Builtin::ePosition:
+			case ast::Builtin::eFragCoord:
+			case ast::Builtin::eSampleID:
+			case ast::Builtin::eFragStencilRefEXT:
+			case ast::Builtin::eTessLevelOuter:
+			case ast::Builtin::eVertexIndex:
+				return true;
+			case ast::Builtin::eViewportIndex:
+				return stage == ast::ShaderStage::eGeometry;
+			case ast::Builtin::ePrimitiveID:
+				return ( isInput
+						&& ( stage == ast::ShaderStage::eTessellationControl
+							|| stage == ast::ShaderStage::eTessellationEvaluation ) )
+					|| ( !isInput
+						&& stage == ast::ShaderStage::eGeometry );
+			case ast::Builtin::ePrimitiveIDIn:
+				return isInput
+					&& stage == ast::ShaderStage::eGeometry;
+			case ast::Builtin::eLayer:
+				return stage == ast::ShaderStage::eGeometry;
+			default:
+				return false;
+			}
+		}
+	}
+
+	std::string getTypeName( ast::type::Kind kind )
+	{
+		std::string result;
+
+		switch ( kind )
+		{
+		case ast::type::Kind::eUndefined:
+			result = "undefined";
+			break;
+		case ast::type::Kind::eVoid:
+			result = "void";
+			break;
+		case ast::type::Kind::eStruct:
+		case ast::type::Kind::eRayDesc:
+			result = "struct";
+			break;
+		case ast::type::Kind::eFunction:
+			result = "function";
+			break;
+		case ast::type::Kind::eBoolean:
+			result = "bool";
+			break;
+		case ast::type::Kind::eInt:
+			result = "int";
+			break;
+		case ast::type::Kind::eUInt:
+			result = "uint";
+			break;
+		case ast::type::Kind::eUInt64:
+			result = "uint64_t";
+			break;
+		case ast::type::Kind::eFloat:
+			result = "float";
+			break;
+		case ast::type::Kind::eDouble:
+			result = "double";
+			break;
+		case ast::type::Kind::eVec2B:
+			result = "bool2";
+			break;
+		case ast::type::Kind::eVec3B:
+			result = "bool3";
+			break;
+		case ast::type::Kind::eVec4B:
+			result = "bool4";
+			break;
+		case ast::type::Kind::eVec2I:
+			result = "int2";
+			break;
+		case ast::type::Kind::eVec3I:
+			result = "int3";
+			break;
+		case ast::type::Kind::eVec4I:
+			result = "int4";
+			break;
+		case ast::type::Kind::eVec2U:
+			result = "uint2";
+			break;
+		case ast::type::Kind::eVec3U:
+			result = "uint3";
+			break;
+		case ast::type::Kind::eVec4U:
+			result = "uint4";
+			break;
+		case ast::type::Kind::eVec2U64:
+			result = "uint64_t2";
+			break;
+		case ast::type::Kind::eVec3U64:
+			result = "uint64_t3";
+			break;
+		case ast::type::Kind::eVec4U64:
+			result = "uint64_t4";
+			break;
+		case ast::type::Kind::eVec2F:
+			result = "float2";
+			break;
+		case ast::type::Kind::eVec3F:
+			result = "float3";
+			break;
+		case ast::type::Kind::eVec4F:
+			result = "float4";
+			break;
+		case ast::type::Kind::eVec2D:
+			result = "double2";
+			break;
+		case ast::type::Kind::eVec3D:
+			result = "double3";
+			break;
+		case ast::type::Kind::eVec4D:
+			result = "double4";
+			break;
+		case ast::type::Kind::eMat2x2F:
+			result = "float2x2";
+			break;
+		case ast::type::Kind::eMat2x3F:
+			result = "float2x3";
+			break;
+		case ast::type::Kind::eMat2x4F:
+			result = "float2x4";
+			break;
+		case ast::type::Kind::eMat3x3F:
+			result = "float3x3";
+			break;
+		case ast::type::Kind::eMat3x2F:
+			result = "float3x2";
+			break;
+		case ast::type::Kind::eMat3x4F:
+			result = "float3x4";
+			break;
+		case ast::type::Kind::eMat4x4F:
+			result = "float4x4";
+			break;
+		case ast::type::Kind::eMat4x2F:
+			result = "float4x2";
+			break;
+		case ast::type::Kind::eMat4x3F:
+			result = "float4x3";
+			break;
+		case ast::type::Kind::eMat2x2D:
+			result = "double2x2";
+			break;
+		case ast::type::Kind::eMat2x3D:
+			result = "double2x3";
+			break;
+		case ast::type::Kind::eMat2x4D:
+			result = "double2x4";
+			break;
+		case ast::type::Kind::eMat3x3D:
+			result = "double3x3";
+			break;
+		case ast::type::Kind::eMat3x2D:
+			result = "double3x2";
+			break;
+		case ast::type::Kind::eMat3x4D:
+			result = "double3x4";
+			break;
+		case ast::type::Kind::eMat4x4D:
+			result = "double4x4";
+			break;
+		case ast::type::Kind::eMat4x2D:
+			result = "double4x2";
+			break;
+		case ast::type::Kind::eMat4x3D:
+			result = "double4x3";
+			break;
+		case ast::type::Kind::eImage:
+			result = "Texture";
+			break;
+		case ast::type::Kind::eSampler:
+			AST_Failure( "Unsupported ast::type::Kind" );
+			break;
+		case ast::type::Kind::eSampledImage:
+			result = "SampledImage";
+			break;
+		case ast::type::Kind::eHalf:
+			result = "half";
+			break;
+		case ast::type::Kind::eVec2H:
+			result = "vector<half, 2>";
+			break;
+		case ast::type::Kind::eVec4H:
+			result = "vector<half, 4>";
+			break;
+		case ast::type::Kind::eAccelerationStructure:
+			result = "RaytracingAccelerationStructure";
+			break;
+		default:
+			break;
+		}
+
+		return result;
+	}
+
+	std::string getSampledName( ast::type::ImageFormat value )
+	{
+		std::string result;
+
+		switch ( value )
+		{
+		case ast::type::ImageFormat::eUnknown:
+			result = "float4";
+			break;
+		case ast::type::ImageFormat::eRgba32f:
+		case ast::type::ImageFormat::eRgba16f:
+			result = "float4";
+			break;
+		case ast::type::ImageFormat::eRg32f:
+		case ast::type::ImageFormat::eRg16f:
+			result = "float2";
+			break;
+		case ast::type::ImageFormat::eR32f:
+		case ast::type::ImageFormat::eR16f:
+			result = "float";
+			break;
+		case ast::type::ImageFormat::eRgba32i:
+		case ast::type::ImageFormat::eRgba16i:
+		case ast::type::ImageFormat::eRgba8i:
+			result = "int4";
+			break;
+		case ast::type::ImageFormat::eRg32i:
+		case ast::type::ImageFormat::eRg16i:
+		case ast::type::ImageFormat::eRg8i:
+			result = "int2";
+			break;
+		case ast::type::ImageFormat::eR32i:
+		case ast::type::ImageFormat::eR16i:
+		case ast::type::ImageFormat::eR8i:
+			result = "int";
+			break;
+		case ast::type::ImageFormat::eRgba32u:
+		case ast::type::ImageFormat::eRgba16u:
+		case ast::type::ImageFormat::eRgba8u:
+			result = "uint4";
+			break;
+		case ast::type::ImageFormat::eRg32u:
+		case ast::type::ImageFormat::eRg16u:
+		case ast::type::ImageFormat::eRg8u:
+			result = "uint2";
+			break;
+		case ast::type::ImageFormat::eR32u:
+		case ast::type::ImageFormat::eR16u:
+		case ast::type::ImageFormat::eR8u:
+			result = "uint";
+			break;
+		default:
+			break;
+		}
+
+		return result;
+	}
+
+	std::string getName( ast::type::ImageDim value )
+	{
+		std::string result;
+
+		switch ( value )
+		{
+		case ast::type::ImageDim::e1D:
+			result = "1D";
+			break;
+		case ast::type::ImageDim::e2D:
+		case ast::type::ImageDim::eRect:
+			result = "2D";
+			break;
+		case ast::type::ImageDim::e3D:
+			result = "3D";
+			break;
+		case ast::type::ImageDim::eCube:
+			result = "Cube";
+			break;
+		case ast::type::ImageDim::eBuffer:
+			result = "Buffer";
+			break;
+		default:
+			AST_Failure( "Unsupported ast::type::ImageDim" );
+			result = "Undefined";
+			break;
+		}
+
+		return result;
+	}
+
+	std::string getLocationName( ast::var::Variable const & var )
+	{
+		std::string result;
+
+		if ( var.isShaderConstant() )
+		{
+			result = "constant_id";
+		}
+		else if ( var.isShaderInput()
+			|| var.isShaderOutput() )
+		{
+			result = "location";
+		}
+
+		return result;
+	}
+
+	std::string getDirectionName( ast::var::Variable const & var )
+	{
+		std::string result;
+
+		if ( var.isStatic() )
+		{
+			result = "static ";
+		}
+
+		if ( var.isIncomingRayPayload()
+			|| var.isIncomingCallableData()
+			|| ( var.isInputParam() && var.isOutputParam() ) )
+		{
+			result = "inout ";
+		}
+		else if ( var.isInputParam()
+			|| var.isShaderInput() )
+		{
+			result = "in ";
+		}
+		else if ( var.isOutputParam()
+			|| var.isShaderOutput() )
+		{
+			result = "out ";
+		}
+		else if ( var.isShaderConstant() )
+		{
+			result = "const ";
+		}
+
+		return result;
+	}
+
+	std::string getOperatorName( ast::expr::Kind kind )
+	{
+		std::string result;
+
+		switch ( kind )
+		{
+		case ast::expr::Kind::eCopy:
+			break;
+		case ast::expr::Kind::eAdd:
+			result = "+";
+			break;
+		case ast::expr::Kind::eMinus:
+			result = "-";
+			break;
+		case ast::expr::Kind::eTimes:
+			result = "*";
+			break;
+		case ast::expr::Kind::eDivide:
+			result = "/";
+			break;
+		case ast::expr::Kind::eModulo:
+			result = "%";
+			break;
+		case ast::expr::Kind::eLShift:
+			result = "<<";
+			break;
+		case ast::expr::Kind::eRShift:
+			result = ">>";
+			break;
+		case ast::expr::Kind::eBitAnd:
+			result = "&";
+			break;
+		case ast::expr::Kind::eBitNot:
+			result = "~";
+			break;
+		case ast::expr::Kind::eBitOr:
+			result = "|";
+			break;
+		case ast::expr::Kind::eBitXor:
+			result = "^";
+			break;
+		case ast::expr::Kind::eLogAnd:
+			result = "&&";
+			break;
+		case ast::expr::Kind::eLogNot:
+			result = "!";
+			break;
+		case ast::expr::Kind::eLogOr:
+			result = "||";
+			break;
+		case ast::expr::Kind::eCast:
+			result = "";
+			break;
+		case ast::expr::Kind::eEqual:
+			result = "==";
+			break;
+		case ast::expr::Kind::eGreater:
+			result = ">";
+			break;
+		case ast::expr::Kind::eGreaterEqual:
+			result = ">=";
+			break;
+		case ast::expr::Kind::eLess:
+			result = "<";
+			break;
+		case ast::expr::Kind::eLessEqual:
+			result = "<=";
+			break;
+		case ast::expr::Kind::eNotEqual:
+			result = "!=";
+			break;
+		case ast::expr::Kind::eComma:
+			result = ",";
+			break;
+		case ast::expr::Kind::eMbrSelect:
+			result = ".";
+			break;
+		case ast::expr::Kind::ePreIncrement:
+			result = "++";
+			break;
+		case ast::expr::Kind::ePreDecrement:
+			result = "--";
+			break;
+		case ast::expr::Kind::ePostIncrement:
+			result = "++";
+			break;
+		case ast::expr::Kind::ePostDecrement:
+			result = "--";
+			break;
+		case ast::expr::Kind::eUnaryMinus:
+			result = "-";
+			break;
+		case ast::expr::Kind::eUnaryPlus:
+			result = "+";
+			break;
+		case ast::expr::Kind::eAssign:
+			result = "=";
+			break;
+		case ast::expr::Kind::eAddAssign:
+			result = "+=";
+			break;
+		case ast::expr::Kind::eMinusAssign:
+			result = "-=";
+			break;
+		case ast::expr::Kind::eTimesAssign:
+			result = "*=";
+			break;
+		case ast::expr::Kind::eDivideAssign:
+			result = "/=";
+			break;
+		case ast::expr::Kind::eModuloAssign:
+			result = "%=";
+			break;
+		case ast::expr::Kind::eLShiftAssign:
+			result = "<<=";
+			break;
+		case ast::expr::Kind::eRShiftAssign:
+			result = ">>=";
+			break;
+		case ast::expr::Kind::eAndAssign:
+			result = "&=";
+			break;
+		case ast::expr::Kind::eNotAssign:
+			result = "!=";
+			break;
+		case ast::expr::Kind::eOrAssign:
+			result = "|=";
+			break;
+		case ast::expr::Kind::eXorAssign:
+			result = "^=";
+			break;
+		default:
+			throw std::runtime_error{ "Non operation expression" };
+		}
+
+		return result;
+	}
+
+	std::string getLayoutName( ast::type::InputLayout layout )
+	{
+		std::string result;
+
+		switch ( layout )
+		{
+		case ast::type::InputLayout::ePointList:
+			result = "point";
+			break;
+		case ast::type::InputLayout::eLineList:
+		case ast::type::InputLayout::eLineStrip:
+			result = "line";
+			break;
+		case ast::type::InputLayout::eTriangleList:
+		case ast::type::InputLayout::eTriangleStrip:
+		case ast::type::InputLayout::eTriangleFan:
+			result = "triangle";
+			break;
+		case ast::type::InputLayout::eLineListWithAdjacency:
+		case ast::type::InputLayout::eLineStripWithAdjacency:
+			result = "lineadj";
+			break;
+		case ast::type::InputLayout::eTriangleListWithAdjacency:
+		case ast::type::InputLayout::eTriangleStripWithAdjacency:
+			result = "triangleadj";
+			break;
+		default:
+			throw std::runtime_error{ "Unsupported input layout." };
+		}
+
+		return result;
+	}
+
+	std::string getLayoutName( ast::type::OutputLayout layout )
+	{
+		std::string result;
+
+		switch ( layout )
+		{
+		case ast::type::OutputLayout::ePointList:
+			result = "PointStream";
+			break;
+		case ast::type::OutputLayout::eLineStrip:
+			result = "LineStream";
+			break;
+		case ast::type::OutputLayout::eTriangleStrip:
+			result = "TriangleStream";
+			break;
+		default:
+			throw std::runtime_error{ "Unsupported output layout." };
+		}
+
+		return result;
+	}
+
+	std::string getTypeName( ast::type::TypePtr type )
+	{
+		std::string result;
+
+		if ( type->getKind() == ast::type::Kind::eArray )
+		{
+			type = std::static_pointer_cast< ast::type::Array >( type )->getType();
+		}
+
+		switch ( type->getRawKind() )
+		{
+		case ast::type::Kind::eStruct:
+		case ast::type::Kind::eRayDesc:
+			result = static_cast< ast::type::Struct const & >( *type ).getName();
+			break;
+		case ast::type::Kind::eImage:
+			result = getTypeName( std::static_pointer_cast< ast::type::Image >( type ) );
+			break;
+		case ast::type::Kind::eSampler:
+			result = getTypeName( std::static_pointer_cast< ast::type::Sampler >( type ) );
+			break;
+		case ast::type::Kind::eGeometryInput:
+			result = getLayoutName( static_cast< ast::type::GeometryInput const & >( *type ).getLayout() )
+				+ " " + getTypeName( static_cast< ast::type::GeometryInput const & >( *type ).getType() );
+			break;
+		case ast::type::Kind::eGeometryOutput:
+			result = getLayoutName( static_cast< ast::type::GeometryOutput const & >( *type ).getLayout() )
+				+ "<" + getTypeName( static_cast< ast::type::GeometryOutput const & >( *type ).getType() ) + ">";
+			break;
+		case ast::type::Kind::eTessellationControlInput:
+			result = std::string{ "InputPatch" }
+				+ "<" + getTypeName( static_cast< ast::type::TessellationControlInput const & >( *type ).getType() )
+				+ ", " + std::to_string( static_cast< ast::type::TessellationControlInput const & >( *type ).getInputVertices() ) + ">";
+			break;
+		case ast::type::Kind::eTessellationControlOutput:
+			result = getTypeName( static_cast< ast::type::TessellationControlOutput const & >( *type ).getType() );
+			break;
+		case ast::type::Kind::eTessellationEvaluationInput:
+			result = std::string{ "OutputPatch" }
+				+ "<" + getTypeName( static_cast< ast::type::TessellationEvaluationInput const & >( *type ).getType() )
+				+ ", " + std::to_string( static_cast< ast::type::TessellationEvaluationInput const & >( *type ).getInputVertices() ) + ">";
+			break;
+		case ast::type::Kind::eTessellationInputPatch:
+			result = getTypeName( static_cast< ast::type::TessellationInputPatch const & >( *type ).getType() );
+			break;
+		case ast::type::Kind::eTessellationOutputPatch:
+			result = getTypeName( static_cast< ast::type::TessellationOutputPatch const & >( *type ).getType() );
+			break;
+		case ast::type::Kind::eFragmentInput:
+			result = getTypeName( static_cast< ast::type::FragmentInput const & >( *type ).getType() );
+			break;
+		case ast::type::Kind::eComputeInput:
+			result = getTypeName( static_cast< ast::type::ComputeInput const & >( *type ).getType() );
+			break;
+		case ast::type::Kind::eRayPayload:
+			result = getTypeName( static_cast< ast::type::RayPayload const & >( *type ).getDataType() );
+			break;
+		case ast::type::Kind::eCallableData:
+			result = getTypeName( static_cast< ast::type::CallableData const & >( *type ).getDataType() );
+			break;
+		case ast::type::Kind::eHitAttribute:
+			result = getTypeName( static_cast< ast::type::HitAttribute const & >( *type ).getDataType() );
+			break;
+		default:
+			result = getTypeName( type->getKind() );
+			break;
+		}
+
+		return result;
+	}
+
+	std::string getTypeArraySize( ast::type::TypePtr type )
+	{
+		if ( type->getKind() == ast::type::Kind::eGeometryInput )
+		{
+			return "[" + std::to_string( ast::type::getArraySize( static_cast< ast::type::GeometryInput const & >( *type ).getLayout() ) ) + "]";
+		}
+
+		std::string result;
+		auto arraySize = getArraySize( type );
+
+		if ( arraySize != ast::type::NotArray )
+		{
+			if ( arraySize == ast::type::UnknownArraySize )
+			{
+				result += "[]";
+			}
+			else
+			{
+				result += "[" + std::to_string( arraySize ) + "]";
+			}
+		}
+
+		return result;
+	}
+
+	std::string getCtorName( ast::expr::CompositeType composite
+		, ast::type::Kind component )
+	{
+		std::string result;
+
+		switch ( composite )
+		{
+		case ast::expr::CompositeType::eVec2:
+			switch ( component )
+			{
+			case ast::type::Kind::eBoolean:
+				result = "bool2";
+				break;
+			case ast::type::Kind::eInt:
+				result = "int2";
+				break;
+			case ast::type::Kind::eUInt:
+				result = "uint2";
+				break;
+			case ast::type::Kind::eUInt64:
+				result = "uint64_t2";
+				break;
+			case ast::type::Kind::eFloat:
+				result = "float2";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double2";
+				break;
+			case ast::type::Kind::eHalf:
+				result = "vector<half, 2>";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eVec3:
+			switch ( component )
+			{
+			case ast::type::Kind::eBoolean:
+				result = "bool3";
+				break;
+			case ast::type::Kind::eInt:
+				result = "int3";
+				break;
+			case ast::type::Kind::eUInt:
+				result = "uint3";
+				break;
+			case ast::type::Kind::eUInt64:
+				result = "uint64_t3";
+				break;
+			case ast::type::Kind::eFloat:
+				result = "float3";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double3";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eVec4:
+			switch ( component )
+			{
+			case ast::type::Kind::eBoolean:
+				result = "bool4";
+				break;
+			case ast::type::Kind::eInt:
+				result = "int4";
+				break;
+			case ast::type::Kind::eUInt:
+				result = "uint4";
+				break;
+			case ast::type::Kind::eUInt64:
+				result = "uint64_t4";
+				break;
+			case ast::type::Kind::eFloat:
+				result = "float4";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double4";
+				break;
+			case ast::type::Kind::eHalf:
+				result = "vector<half, 4>";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat2x2:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float2x2";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double2x2";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat2x3:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float2x3";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double2x3";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat2x4:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float2x4";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double2x4";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat3x2:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float3x2";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double3x2";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat3x3:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float3x3";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double3x3";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat3x4:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float3x4";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double3x4";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat4x2:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float4x2";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double4x2";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat4x3:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float4x3";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double4x3";
+				break;
+			default:
+				break;
+			}
+			break;
+		case ast::expr::CompositeType::eMat4x4:
+			switch ( component )
+			{
+			case ast::type::Kind::eFloat:
+				result = "float4x4";
+				break;
+			case ast::type::Kind::eDouble:
+				result = "double4x4";
+				break;
+			default:
+				break;
+			}
+			break;
+		default:
+			throw std::runtime_error{ "Unsupported composite type." };
+		}
+
+		return result;
+	}
+
+	ast::type::Kind getBuiltinHlslKind( ast::Builtin builtin
+		, ast::type::Kind input )
+	{
+		ast::type::Kind result = input;
+
+		if ( builtin == ast::Builtin::eVertexIndex
+			|| builtin == ast::Builtin::eInstanceIndex
+			|| builtin == ast::Builtin::eDrawIndex
+			|| builtin == ast::Builtin::eBaseVertex
+			|| builtin == ast::Builtin::eBaseInstance
+			|| builtin == ast::Builtin::ePrimitiveID
+			|| builtin == ast::Builtin::eInvocationID
+			|| builtin == ast::Builtin::eSampleID
+			|| builtin == ast::Builtin::eLayer
+			|| builtin == ast::Builtin::eViewportIndex
+			|| builtin == ast::Builtin::ePatchVerticesIn
+			|| builtin == ast::Builtin::ePrimitiveIDIn )
+		{
+			result = ast::type::Kind::eUInt;
+		}
+
+		return result;
+	}
+
+	std::string getSemantic( ast::ShaderStage stage
+		, ast::Builtin builtin
+		, bool isInput
+		, uint32_t location
+		, ast::type::TypePtr type
+		, Semantic & defaultSemantic )
+	{
+		static std::map< ast::Builtin, std::string > const NamesMap
+		{
+			{ ast::Builtin::eLocalInvocationID, "SV_GroupThreadID" },
+			{ ast::Builtin::eLocalInvocationIndex, "SV_GroupIndex" },
+			{ ast::Builtin::eWorkGroupID, "SV_GroupID" },
+			{ ast::Builtin::eTessCoord, "SV_DomainLocation" },
+			{ ast::Builtin::eGlobalInvocationID, "SV_DispatchThreadID" },
+			{ ast::Builtin::eFragDepth, "SV_Depth" },
+			{ ast::Builtin::eSampleMask, "SV_Coverage" },
+			{ ast::Builtin::eSampleMaskIn, "SV_Coverage" },
+			{ ast::Builtin::eCullDistance, "SV_CullDistance" },
+			{ ast::Builtin::eClipDistance, "SV_ClipDistance" },
+			{ ast::Builtin::eTessLevelInner, "SV_InsideTessFactor" },
+			{ ast::Builtin::eInstanceIndex, "SV_InstanceID" },
+			{ ast::Builtin::eFrontFacing, "SV_IsFrontFace" },
+			{ ast::Builtin::ePosition, "SV_Position" },
+			{ ast::Builtin::eFragCoord, "SV_Position" },
+			{ ast::Builtin::ePrimitiveID, "SV_PrimitiveID" },
+			{ ast::Builtin::ePrimitiveIDIn, "SV_PrimitiveID" },
+			{ ast::Builtin::eLayer, "SV_RenderTargetArrayIndex" },
+			{ ast::Builtin::eSampleID, "SV_SampleIndex" },
+			{ ast::Builtin::eFragStencilRefEXT, "SV_StencilRef" },
+			{ ast::Builtin::eTessLevelOuter, "SV_TessFactor" },
+			{ ast::Builtin::eVertexIndex, "SV_VertexID" },
+			{ ast::Builtin::eViewportIndex, "SV_ViewportArrayIndex" },
+		};
+		std::string result;
+		auto it = NamesMap.find( builtin );
+
+		if ( builtin == ast::Builtin::ePosition )
+		{
+			if ( !isInput
+				&& stage == ast::ShaderStage::eTessellationControl )
+			{
+				return "BEZIERPOS";
+			}
+
+			return "SV_Position";
+		}
+		else if ( builtin == ast::Builtin::eInvocationID )
+		{
+			if ( stage == ast::ShaderStage::eGeometry )
+			{
+				return "SV_GSInstanceID";
+			}
+
+			return "SV_OutputControlPointID";
+		}
+		else if ( it != NamesMap.end() )
+		{
+			result = it->second;
+		}
+		else
+		{
+			result = defaultSemantic.name + std::to_string( location );
+			uint32_t inc = 1u;
+
+			if ( isMatrixType( type->getKind() ) )
+			{
+				inc = getComponentCount( type );
+			}
+
+			auto arraySize = getArraySize( type );
+
+			if ( arraySize != ast::type::NotArray )
+			{
+				inc *= arraySize;
+			}
+
+			defaultSemantic.index += inc;
+		}
+
+		return result;
+	}
+
+	bool isUnaryPre( ast::expr::Kind kind )
+	{
+		bool result;
+
+		switch ( kind )
+		{
+		case ast::expr::Kind::eMbrSelect:
+		case ast::expr::Kind::ePostIncrement:
+		case ast::expr::Kind::ePostDecrement:
+			result = false;
+			break;
+		case ast::expr::Kind::eBitNot:
+		case ast::expr::Kind::eLogNot:
+		case ast::expr::Kind::eCast:
+		case ast::expr::Kind::eCopy:
+		case ast::expr::Kind::ePreIncrement:
+		case ast::expr::Kind::ePreDecrement:
+		case ast::expr::Kind::eUnaryMinus:
+		case ast::expr::Kind::eUnaryPlus:
+			result = true;
+			break;
+		default:
+			throw std::runtime_error{ "Non unary expression" };
+		}
+
+		return result;
+	}
+
+	std::string adaptName( std::string const & name )
+	{
+#if 0
+		if ( name == "texture"
+			|| name == "point" )
+		{
+			return "_" + name;
+		}
+#endif
+		return name;
+	}
+
+	LinkedVars::iterator updateLinkedVars( ast::var::VariablePtr var
+		, LinkedVars & linkedVars
+		, uint32_t & nextVarId )
+	{
+		auto it = linkedVars.find( var );
+		auto type = getNonArrayType( var->getType() );
+
+		if ( isSampledImageType( type->getKind() )
+			&& it == linkedVars.end() )
+		{
+			auto sampledType = std::static_pointer_cast< ast::type::SampledImage >( type );
+
+			if ( sampledType->getConfig().dimension != ast::type::ImageDim::eBuffer )
+			{
+				auto texture = ast::var::makeVariable( ++nextVarId
+					, sampledType->getImageType()
+					, var->getName() + "_texture" );
+				auto sampler = ast::var::makeVariable( ++nextVarId
+					, sampledType->getSamplerType()
+					, var->getName() + "_sampler" );
+				it = linkedVars.emplace( var, std::make_pair( texture, sampler ) ).first;
+			}
+		}
+
+		return it;
+	}
+
+	//*********************************************************************************************
+
+	IOMapping::IOMapping( HlslShader & pshader
+		, IOMappingMode pmode
+		, bool pisInput
+		, bool pisPatch
+		, std::string const & infix )
+		: shader{ &pshader }
+		, stage{ shader->getType() }
+		, isInput{ pisInput }
+		, isPatch{ pisPatch }
+		, mode{ pmode }
+	{
+		auto suffix = infix + ( isInput ? std::string{ "Input" } : std::string{ "Output" } );
+		auto type = ( isPatch ? std::string{ "Patch" } : std::string{ "" } );
+		auto flag = ( isPatch
+			? ( isInput ? ast::var::Flag::ePatchInput : ast::var::Flag::ePatchOutput )
+			: ( isInput ? ast::var::Flag::eShaderInput : ast::var::Flag::eShaderOutput ) );
+		auto paramFlag = isInput ? ast::var::Flag::eInputParam : ast::var::Flag::eOutputParam;
+		paramStruct = shader->getTypesCache().getIOStruct( ast::type::MemoryLayout::eC
+			, "HLSL_SDW_" + type + suffix
+			, flag );
+
+		if ( stage == ast::ShaderStage::eGeometry && !isInput )
+		{
+			paramVar = shader->registerName( "sdw" + suffix + type
+				, paramStruct
+				, flag | paramFlag | ast::var::Flag::eInputParam | ast::var::Flag::eShaderInput );
+		}
+		else
+		{
+			paramVar = shader->registerName( "sdw" + suffix + type
+				, paramStruct
+				, flag | paramFlag );
+		}
+
+		if ( needsSeparate( mode ) )
+		{
+			separateStruct = shader->getTypesCache().getStruct( ast::type::MemoryLayout::eC
+				, "HLSL_SDWParam_" + suffix );
+			separateVar = shader->registerName( "sdwParam" + suffix
+				, separateStruct
+				, ( mode == IOMappingMode::eGlobalSeparateVar
+					? ast::var::Flag::eStatic
+					: ast::var::Flag::eNone ) );
+			mainVar = separateVar;
+		}
+		else
+		{
+			mainVar = paramVar;
+		}
+	}
+
+	void IOMapping::writeGlobals( ast::stmt::Container & stmt
+		, std::unordered_set< ast::type::StructPtr > & declaredStructs )const
+	{
+		switch ( mode )
+		{
+		case hlsl::IOMappingMode::eNoSeparate:
+			if ( !paramStruct->empty() )
+			{
+				declareStruct( stmt, paramStruct, declaredStructs );
+			}
+			break;
+		case hlsl::IOMappingMode::eNoSeparateDistinctParams:
+			if ( !unsupportedBuiltins.empty() )
+			{
+				for ( auto & builtin : unsupportedBuiltins )
+				{
+					stmt.addStmt( ast::stmt::makeVariableDecl( ast::var::makeVariable( builtin->getEntityName()
+						, builtin->getType()
+						, builtin->getFlags() | ast::var::Flag::eStatic ) ) );
+				}
+			}
+			break;
+		case hlsl::IOMappingMode::eLocalReturn:
+			if ( !paramStruct->empty() )
+			{
+				declareStruct( stmt, paramStruct, declaredStructs );
+			}
+			break;
+		case hlsl::IOMappingMode::eGlobalSeparateVar:
+			if ( !paramStruct->empty() )
+			{
+				declareStruct( stmt, paramStruct, declaredStructs );
+			}
+			if ( hasSeparate() )
+			{
+				declareStruct( stmt, separateStruct, declaredStructs );
+				assert( mainVar == separateVar );
+				stmt.addStmt( ast::stmt::makeVariableDecl( separateVar ) );
+			}
+			break;
+		case hlsl::IOMappingMode::eLocalSeparateVar:
+			if ( !paramStruct->empty() )
+			{
+				declareStruct( stmt, paramStruct, declaredStructs );
+			}
+			if ( hasSeparate() )
+			{
+				declareStruct( stmt, separateStruct, declaredStructs );
+			}
+			break;
+		}
+	}
+
+	void IOMapping::writeLocalesBegin( ast::stmt::Container & stmt )const
+	{
+		switch ( mode )
+		{
+		case hlsl::IOMappingMode::eNoSeparate:
+		case hlsl::IOMappingMode::eNoSeparateDistinctParams:
+			break;
+		case hlsl::IOMappingMode::eLocalReturn:
+			if ( !paramStruct->empty() )
+			{
+				stmt.addStmt( ast::stmt::makeVariableDecl( paramVar ) );
+			}
+			break;
+		case hlsl::IOMappingMode::eGlobalSeparateVar:
+			if ( hasSeparate() && isInput )
+			{
+				// Assign main inputs to separate inputs.
+				auto & cache = separateStruct->getCache();
+				stmt.addStmt( ast::stmt::makeSimple( ast::expr::makeAssign( separateStruct
+					, ast::expr::makeIdentifier( cache, separateVar )
+					, ast::expr::makeIdentifier( cache, paramVar ) ) ) );
+			}
+			break;
+		case hlsl::IOMappingMode::eLocalSeparateVar:
+			if ( separateVar && !isInput )
+			{
+				assert( mainVar == separateVar );
+				stmt.addStmt( ast::stmt::makeVariableDecl( separateVar ) );
+			}
+			break;
+		}
+	}
+
+	void IOMapping::writeLocalesEnd( ast::stmt::Container & stmt )const
+	{
+		auto & cache = paramStruct->getCache();
+
+		switch ( mode )
+		{
+		case hlsl::IOMappingMode::eNoSeparate:
+		case hlsl::IOMappingMode::eNoSeparateDistinctParams:
+			break;
+		case hlsl::IOMappingMode::eLocalReturn:
+			if ( !paramStruct->empty() )
+			{
+				stmt.addStmt( ast::stmt::makeReturn( ast::expr::makeIdentifier( cache
+					, paramVar ) ) );
+			}
+			break;
+		case hlsl::IOMappingMode::eGlobalSeparateVar:
+			if ( !isInput && hasSeparate() )
+			{
+				// Declare output.
+				stmt.addStmt( ast::stmt::makeVariableDecl( paramVar ) );
+
+				if ( stage == ast::ShaderStage::eVertex )
+				{
+					// Assign global outputs to main outputs, member wise
+					auto inIndex = 0u;
+					auto outIndex = 0u;
+					assert( paramStruct->size() == separateStruct->size() );
+					auto size = paramStruct->size();
+
+					for ( auto j = 0u; j < size; ++j )
+					{
+						auto ioMbr = paramStruct->getMember( j );
+						auto baseMbr = separateStruct->getMember( j );
+
+						if ( ioMbr.builtin == ast::Builtin::eClipDistance )
+						{
+							for ( uint32_t i = 0u; i < 4u; ++i )
+							{
+								stmt.addStmt( ast::stmt::makeSimple( ast::expr::makeAssign( baseMbr.type
+									, ast::expr::makeSwizzle( ast::expr::makeMbrSelect( ast::expr::makeIdentifier( cache, paramVar )
+										, inIndex
+										, 0u )
+										, ast::expr::SwizzleKind::fromOffset( i ) )
+									, ast::expr::makeArrayAccess( cache.getFloat()
+										, ast::expr::makeMbrSelect( ast::expr::makeIdentifier( cache, separateVar )
+											, outIndex
+											, 0u )
+										, ast::expr::makeLiteral( cache, i ) ) ) ) );
+							}
+
+							++inIndex;
+
+							for ( uint32_t i = 0u; i < 4u; ++i )
+							{
+								stmt.addStmt( ast::stmt::makeSimple( ast::expr::makeAssign( baseMbr.type
+									, ast::expr::makeSwizzle( ast::expr::makeMbrSelect( ast::expr::makeIdentifier( cache, paramVar )
+										, inIndex
+										, 0u )
+										, ast::expr::SwizzleKind::fromOffset( i ) )
+									, ast::expr::makeArrayAccess( cache.getFloat()
+										, ast::expr::makeMbrSelect( ast::expr::makeIdentifier( cache, separateVar )
+											, outIndex
+											, 0u )
+										, ast::expr::makeLiteral( cache, i + 4u ) ) ) ) );
+							}
+
+							++inIndex;
+							++outIndex;
+						}
+						else if ( ioMbr.builtin == ast::Builtin::eCullDistance )
+						{
+						}
+						else
+						{
+							stmt.addStmt( ast::stmt::makeSimple( ast::expr::makeAssign( baseMbr.type
+								, ast::expr::makeMbrSelect( ast::expr::makeIdentifier( cache, paramVar )
+									, inIndex
+									, uint64_t( ast::var::Flag::eImplicit ) )
+								, ast::expr::makeMbrSelect( ast::expr::makeIdentifier( cache, separateVar )
+									, outIndex
+									, uint64_t( ast::var::Flag::eImplicit ) ) ) ) );
+							++inIndex;
+							++outIndex;
+						}
+					}
+				}
+				else
+				{
+					// Assign global outputs to main outputs
+					stmt.addStmt( ast::stmt::makeSimple( ast::expr::makeAssign( paramStruct
+						, ast::expr::makeIdentifier( cache, paramVar )
+						, ast::expr::makeIdentifier( cache, separateVar ) ) ) );
+				}
+
+				// Return output.
+				stmt.addStmt( ast::stmt::makeReturn( ast::expr::makeIdentifier( cache
+					, paramVar ) ) );
+			}
+			break;
+		case hlsl::IOMappingMode::eLocalSeparateVar:
+			break;
+		}
+	}
+
+	ast::type::TypePtr IOMapping::fillParameters( ast::var::VariableList & parameters
+		, ast::stmt::Container & stmt )const
+	{
+		ast::type::TypePtr result = nullptr;
+
+		switch ( mode )
+		{
+		case hlsl::IOMappingMode::eNoSeparate:
+		case hlsl::IOMappingMode::eLocalSeparateVar:
+			if ( paramVar && !paramStruct->empty() )
+			{
+				parameters.push_back( paramVar );
+			}
+			break;
+		case hlsl::IOMappingMode::eLocalReturn:
+			if ( paramVar && !paramStruct->empty() )
+			{
+				result = paramVar->getType();
+			}
+			break;
+		case hlsl::IOMappingMode::eNoSeparateDistinctParams:
+			parameters.insert( parameters.end()
+				, distinctParams.begin()
+				, distinctParams.end() );
+			break;
+		case hlsl::IOMappingMode::eGlobalSeparateVar:
+			if ( !isInput && paramVar && !paramStruct->empty() )
+			{
+				result = paramVar->getType();
+			}
+			else if ( hasSeparate() )
+			{
+				parameters.push_back( paramVar );
+			}
+			break;
+		}
+
+		if ( paramVar->getType()->getKind() == ast::type::Kind::eComputeInput )
+		{
+			auto & compType = static_cast< ast::type::ComputeInput const & >( *paramVar->getType() );
+			stmt.addStmt( ast::stmt::makeInputComputeLayout( compType.getType()
+				, compType.getLocalSizeX()
+				, compType.getLocalSizeY()
+				, compType.getLocalSizeZ() ) );
+		}
+
+		return result;
+	}
+
+	void IOMapping::initialiseMainVar( ast::var::VariablePtr srcVar
+		, ast::type::TypePtr type
+		, uint64_t flags
+		, VarVarMap & paramToEntryPoint )
+	{
+		paramVar->updateType( type );
+		paramToEntryPoint.emplace( srcVar, mainVar );
+	}
+
+	void IOMapping::initialisePatchVar( ast::var::VariablePtr srcVar
+		, ast::type::TypePtr type
+		, uint64_t flags
+		, VarVarMap & paramToEntryPoint )
+	{
+		initialiseMainVar( srcVar, type, flags, paramToEntryPoint );
+
+		if ( isStructType( srcVar->getType() ) )
+		{
+			auto structType = getStructType( srcVar->getType() );
+			uint32_t mbrIndex = 0u;
+
+			for ( auto & mbr : *structType )
+			{
+				std::vector< PendingMbrIO >::iterator it;
+				addPendingMbr( srcVar
+					, mbrIndex
+					, flags
+					, mbr.location );
+				processPendingMbrOuter( srcVar
+					, mbrIndex
+					, it );
+				++mbrIndex;
+			}
+		}
+	}
+
+	void IOMapping::addPending( ast::var::VariablePtr pendingVar
+		, uint32_t location )
+	{
+		auto ires = m_pending.emplace( pendingVar->getName(), PendingIO{} );
+
+		if ( ires.second )
+		{
+			auto it = ires.first;
+			it->second.location = location;
+			it->second.var = pendingVar;
+		}
+	}
+
+	void IOMapping::addPendingMbr( ast::var::VariablePtr outerVar
+		, uint32_t mbrIndex
+		, uint64_t flags
+		, uint32_t location )
+	{
+		auto it = std::find_if( m_pendingMbr.begin()
+			, m_pendingMbr.end()
+			, [&outerVar, &mbrIndex]( PendingMbrIO const & lookup )
+			{
+				return lookup.index == mbrIndex
+					&& lookup.outer == outerVar;
+			} );
+
+		if ( it == m_pendingMbr.end() )
+		{
+			PendingIO io{};
+			io.location = location;
+			io.flags = flags;
+			m_pendingMbr.push_back( { outerVar, mbrIndex, std::move( io ) } );
+		}
+	}
+
+	void IOMapping::addPendingMbr( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, uint32_t location )
+	{
+		auto ident = ast::findIdentifier( outer );
+		assert( ident );
+		addPendingMbr( ident->getVariable()
+			, mbrIndex
+			, flags.getFlags()
+			, location );
+	}
+
+	ast::expr::ExprPtr IOMapping::processPendingMbr( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, ExprAdapter & adapter )
+	{
+		if ( !flags.isShaderInput() && !flags.isShaderOutput() )
+		{
+			return nullptr;
+		}
+
+		auto ident = ast::findIdentifier( outer );
+
+		if ( !ident )
+		{
+			return nullptr;
+		}
+
+		std::vector< PendingMbrIO >::iterator it;
+		auto result = processPendingMbrOuter( ident->getVariable()
+			, mbrIndex
+			, it );
+
+		if ( it == m_pendingMbr.end() )
+		{
+			return result;
+		}
+
+		auto & mbr = *it;
+
+		if ( outer->getKind() != ast::expr::Kind::eArrayAccess )
+		{
+			return ast::expr::makeMbrSelect( std::move( result )
+				, mbr.io.result.mbrIndex
+				, mbr.io.result.flags );
+		}
+
+		auto & arrayAccess = static_cast< ast::expr::ArrayAccess const & >( *outer );
+		auto type = getNonArrayType( result->getType() );
+		return ast::expr::makeMbrSelect( ast::expr::makeArrayAccess( type
+				, std::move( result )
+				, adapter.doSubmit( arrayAccess.getRHS() ) )
+			, mbr.io.result.mbrIndex
+			, mbr.io.result.flags );
+	}
+
+	ast::expr::ExprPtr IOMapping::processPending( std::string const & name )
+	{
+		auto it = m_pending.find( name );
+
+		if ( m_pending.end() == it )
+		{
+			return nullptr;
+		}
+
+		auto & mbr = *it;
+		auto pendingVar = mbr.second.var;
+		auto type = pendingVar->getType();
+		auto location = it->second.location;
+
+		if ( mbr.second.result.mbrIndex == ast::type::Struct::NotFound )
+		{
+			mbr.second.result = processPendingType( type
+				, pendingVar->getName()
+				, pendingVar->isBuiltin() ? pendingVar->getBuiltin() : ast::Builtin::eNone
+				, mbr.second.flags
+				, location );
+		}
+
+		if ( mbr.second.result.expr )
+		{
+			return ast::ExprCloner::submit( mbr.second.result.expr.get() );
+		}
+
+		auto & cache = type->getCache();
+		auto outerIdent = ast::expr::makeIdentifier( cache, mainVar );
+		return ast::expr::makeMbrSelect( std::move( outerIdent )
+			, mbr.second.result.mbrIndex
+			, mbr.second.result.flags );
+	}
+
+	ast::expr::ExprPtr IOMapping::processPending( ast::var::VariablePtr srcVar )
+	{
+		auto result = processPending( srcVar->getName() );
+
+		if ( result )
+		{
+			return result;
+		}
+
+		return ast::expr::makeIdentifier( srcVar->getType()->getCache()
+				, srcVar );
+	}
+
+	bool IOMapping::isValid( ast::Builtin builtin )const
+	{
+		if ( isInput )
+		{
+			return isShaderInput( builtin, stage );
+		}
+
+		return isShaderOutput( builtin, stage );
+	}
+
+	bool IOMapping::hasSeparate()const
+	{
+		return separateVar
+			&& !separateStruct->empty();
+	}
+
+	PendingResult IOMapping::processPendingType( ast::type::TypePtr type
+		, std::string const & name
+		, ast::Builtin builtin
+		, uint64_t flags
+		, uint32_t location
+		, uint32_t arraySize
+		, ast::type::IOStruct & structType )
+	{
+		if ( builtin != ast::Builtin::eNone )
+		{
+			auto res = structType.findMember( builtin );
+
+			if ( res != ast::type::Struct::NotFound )
+			{
+				return { res, flags };
+			}
+		}
+		else
+		{
+			auto res = structType.findMember( name );
+
+			if ( res != ast::type::Struct::NotFound )
+			{
+				return { res, flags };
+			}
+		}
+
+		auto resultIndex = uint32_t( structType.size() );
+		auto resultFlags = flags;
+
+		if ( builtin == ast::Builtin::eClipDistance )
+		{
+			auto nonArray = type->getCache().getVec4F();
+
+			for ( uint32_t i = 0u; i < 2u; ++i )
+			{
+				structType.declMember( builtin
+					, nonArray->getKind()
+					, ast::type::NotArray
+					, i );
+			}
+		}
+		else if ( builtin != ast::Builtin::eNone )
+		{
+			structType.declMember( builtin
+				, getNonArrayType( type )->getKind()
+				, getArraySize( type ) );
+		}
+		else
+		{
+			auto nonArray = getNonArrayType( type );
+
+			if ( arraySize != ast::type::NotArray
+				&& isInput
+				&& ( stage == ast::ShaderStage::eGeometry
+					|| stage == ast::ShaderStage::eTessellationControl
+					|| stage == ast::ShaderStage::eTessellationEvaluation ) )
+			{
+				arraySize = ast::type::NotArray;
+			}
+
+			if ( nonArray->getKind() == ast::type::Kind::eStruct
+				|| nonArray->getKind() == ast::type::Kind::eRayDesc )
+			{
+				structType.declMember( name
+					, std::static_pointer_cast< ast::type::Struct >( nonArray )
+					, arraySize );
+			}
+			else
+			{
+				structType.declMember( name
+					, nonArray->getKind()
+					, arraySize
+					, location );
+			}
+		}
+
+		if ( separateStruct )
+		{
+			// Separate variable needed.
+			resultIndex = uint32_t( separateStruct->size() );
+			resultFlags = 0u;
+			separateStruct->declMember( name
+				, getNonArrayType( type )->getKind()
+				, getArraySize( type ) );
+		}
+
+		return { resultIndex, resultFlags };
+	}
+
+	PendingResult IOMapping::processPendingType( ast::type::TypePtr type
+		, std::string const & name
+		, ast::Builtin builtin
+		, uint64_t flags
+		, uint32_t location )
+	{
+		auto arraySize = getArraySize( type );
+		type = getNonArrayType( type );
+		auto compType = getComponentType( type );
+
+		if ( ( stage != ast::ShaderStage::eVertex || !isInput )
+			&& ( isUnsignedIntType( compType ) || isSignedIntType( compType ) ) )
+		{
+			flags = flags | ast::var::Flag::eFlat;
+		}
+
+		if ( builtin != ast::Builtin::eNone )
+		{
+			type = type->getCache().getBasicType( getBuiltinHlslKind( builtin, type->getKind() ) );
+
+			if ( arraySize != ast::type::NotArray )
+			{
+				type = type->getCache().getArray( type, arraySize );
+			}
+		}
+
+		if ( mode == IOMappingMode::eNoSeparateDistinctParams )
+		{
+			auto it = std::find_if( distinctParams.begin()
+				, distinctParams.end()
+				, [&name, &builtin]( ast::var::VariablePtr const & lookup )
+				{
+					return ( ( builtin != ast::Builtin::eNone ) && lookup->getBuiltin() == builtin )
+						|| ( ( builtin == ast::Builtin::eNone ) && lookup->getName() == name );
+				} );
+
+			if ( distinctParams.end() == it )
+			{
+				if ( builtin != ast::Builtin::eNone )
+				{
+					if ( isSupported( builtin, stage, isInput ) )
+					{
+						distinctParams.push_back( shader->registerBuiltin( builtin, type, flags ) );
+						it = std::next( distinctParams.begin(), ptrdiff_t( distinctParams.size() ) - 1 );
+					}
+					else
+					{
+						unsupportedBuiltins.push_back( shader->registerBuiltin( builtin, type, flags ) );
+						it = std::next( unsupportedBuiltins.begin(), ptrdiff_t( unsupportedBuiltins.size() ) - 1 );
+					}
+				}
+				else
+				{
+					distinctParams.push_back( shader->registerName( name, type, flags ) );
+					it = std::next( distinctParams.begin(), ptrdiff_t( distinctParams.size() ) - 1 );
+				}
+
+			}
+
+			return { 0u, 0u, ast::expr::makeIdentifier( shader->getTypesCache(), *it ) };
+		}
+
+		if ( separateStruct )
+		{
+			auto res = separateStruct->findMember( name );
+
+			if ( res != ast::type::Struct::NotFound )
+			{
+				return { res, 0u };
+			}
+		}
+
+		return processPendingType( type
+			, name
+			, builtin
+			, flags
+			, location
+			, arraySize
+			, *paramStruct );
+	}
+
+	PendingResult IOMapping::processPendingType( ast::type::Struct const & structType
+		, uint32_t mbrIndex
+		, uint64_t mbrFlags
+		, uint32_t mbrLocation )
+	{
+		auto & mbr = *std::next( structType.begin(), ptrdiff_t( mbrIndex ) );
+		return processPendingType( mbr.type
+			, mbr.name
+			, mbr.builtin
+			, mbrFlags
+			, mbrLocation );
+	}
+
+	ast::expr::ExprPtr IOMapping::processPendingMbrOuter( ast::var::VariablePtr outerVar
+		, uint32_t mbrIndex
+		, std::vector< PendingMbrIO >::iterator & it )
+	{
+		it = m_pendingMbr.end();
+		auto & cache = outerVar->getType()->getCache();
+
+		it = std::find_if( m_pendingMbr.begin()
+			, m_pendingMbr.end()
+			, [&outerVar, &mbrIndex]( PendingMbrIO const & lookup )
+			{
+				return lookup.index == mbrIndex
+					&& lookup.outer == outerVar;
+			} );
+
+		if ( m_pendingMbr.end() == it )
+		{
+			return nullptr;
+		}
+
+		auto & mbr = *it;
+
+		if ( mbr.io.result.mbrIndex == ast::type::Struct::NotFound )
+		{
+			auto structType = getStructType( mbr.outer->getType() );
+
+			mbr.io.result = processPendingType( *structType
+				, mbr.index
+				, mbr.io.flags
+				, mbr.io.location );
+		}
+
+		if ( !mbr.io.result.expr )
+		{
+			mbr.io.result.expr = ast::expr::makeIdentifier( cache, mainVar );
+		}
+
+		if ( !isStructType( mbr.io.result.expr->getType() ) )
+		{
+			it = m_pendingMbr.end();
+		}
+
+		return ast::ExprCloner::submit( mbr.io.result.expr.get() );
+	}
+
+	//*********************************************************************************************
+
+	Routine::Routine( HlslShader & pshader
+		, AdaptationData * pparent
+		, bool pisMain
+		, std::string const & name )
+		: shader{ &pshader }
+		, parent{ pparent }
+		, isMain{ pisMain }
+		, needsSeparateFunc{ hlsl::needsSeparateFunc( shader->getType(), isMain ) }
+		, m_highFreqOutputs{ pshader, getMode( shader->getType(), isMain, false, true ), false, false, getFuncName( isMain ) }
+		, m_lowFreqInputs{ *shader, getMode( shader->getType(), isMain, true, false ), true, false, getFuncName( isMain ) }
+		, m_lowFreqOutputs{ *shader, getMode( shader->getType(), isMain, false, false ), false, false, getFuncName( isMain ) }
+	{
+	}
+
+	void Routine::initialiseHFOutput( ast::var::VariablePtr srcVar
+		, ast::type::GeometryOutput const & geomType )
+	{
+		m_highFreqOutputs.initialiseMainVar( srcVar
+			, ast::type::makeGeometryOutputType( m_highFreqOutputs.paramStruct
+				, geomType.getLayout()
+				, geomType.getCount() )
+			, ast::var::Flag::eInputParam | ast::var::Flag::eOutputParam | ast::var::Flag::eShaderOutput
+			, paramToEntryPoint );
+	}
+
+	void Routine::initialiseHFOutput( ast::var::VariablePtr srcVar
+		, ast::type::TessellationControlOutput const & tessType )
+	{
+		m_highFreqOutputs.initialiseMainVar( srcVar
+			, ast::type::makeTessellationControlOutputType( m_highFreqOutputs.paramStruct
+				, tessType.getDomain()
+				, tessType.getPartitioning()
+				, tessType.getTopology()
+				, tessType.getOrder()
+				, tessType.getOutputVertices() )
+			, uint64_t( ast::var::Flag::eShaderOutput )
+			, paramToEntryPoint );
+	}
+
+	void Routine::initialiseHFOutput( ast::var::VariablePtr srcVar
+		, ast::type::TessellationOutputPatch const & patchType )
+	{
+		m_highFreqOutputs.initialiseMainVar( srcVar
+			, ast::type::makeTessellationOutputPatchType( m_highFreqOutputs.paramStruct
+				, patchType.getLocation() )
+			, uint64_t( ast::var::Flag::eShaderOutput )
+			, paramToEntryPoint );
+	}
+
+	void Routine::writeGlobals( ast::stmt::Container & cont
+		, std::unordered_set< ast::type::StructPtr > & declaredStructs )
+	{
+		m_highFreqOutputs.writeGlobals( cont, declaredStructs );
+		m_lowFreqInputs.writeGlobals( cont, declaredStructs );
+		m_lowFreqOutputs.writeGlobals( cont, declaredStructs );
+		globalDeclarations = &cont;
+	}
+
+	void Routine::writeLocalesBegin( ast::stmt::Container & cont )const
+	{
+		m_highFreqOutputs.writeLocalesBegin( cont );
+		m_lowFreqInputs.writeLocalesBegin( cont );
+		m_lowFreqOutputs.writeLocalesBegin( cont );
+	}
+
+	void Routine::writeLocalesEnd( ast::stmt::Container & cont )const
+	{
+		m_highFreqOutputs.writeLocalesEnd( cont );
+		m_lowFreqInputs.writeLocalesEnd( cont );
+		m_lowFreqOutputs.writeLocalesEnd( cont );
+	}
+
+	ast::type::TypePtr Routine::fillParameters( ast::var::VariableList & parameters
+		, ast::stmt::Container & stmt )const
+	{
+		auto result = getNonNull( m_highFreqOutputs.fillParameters( parameters, stmt ), nullptr );
+		result = getNonNull( m_lowFreqInputs.fillParameters( parameters, stmt ), result );
+		return getNonNull( m_lowFreqOutputs.fillParameters( parameters, stmt ), result );
+	}
+
+	ast::expr::ExprPtr Routine::processPendingMbr( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, ExprAdapter & adapter )
+	{
+		if ( flags.isShaderInput() )
+		{
+			return processPendingMbrInput( outer
+				, mbrIndex
+				, flags
+				, adapter );
+		}
+
+		if ( flags.isShaderOutput() )
+		{
+			return processPendingMbrOutput( outer
+				, mbrIndex
+				, flags
+				, adapter );
+		}
+
+		return nullptr;
+	}
+
+	ast::expr::ExprPtr Routine::processPending( ast::var::VariablePtr var )
+	{
+		auto it = paramToEntryPoint.find( var );
+
+		if ( it != paramToEntryPoint.end() )
+		{
+			return ast::expr::makeIdentifier( var->getType()->getCache()
+				, it->second );
+		}
+
+		if ( var->isShaderInput() )
+		{
+			return processPendingInput( var );
+		}
+
+		if ( var->isShaderOutput() )
+		{
+			return processPendingOutput( var );
+		}
+
+		return nullptr;
+	}
+
+	void Routine::addMbrBuiltin( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, uint32_t location )
+	{
+		if ( flags.isShaderOutput() )
+		{
+			addPendingMbrOutput( outer
+				, mbrIndex
+				, flags
+				, location );
+		}
+		else
+		{
+			addPendingMbrInput( outer
+				, mbrIndex
+				, flags
+				, location );
+		}
+	}
+
+	IOMapping & Routine::getLFInputs()
+	{
+		return m_lowFreqInputs;
+	}
+
+	void Routine::addInputVar( ast::var::VariablePtr var
+		, uint32_t location )
+	{
+		m_lowFreqInputs.addPending( var, location );
+
+		if ( needsSeparateFunc )
+		{
+			m_lowFreqInputs.processPending( var );
+		}
+	}
+
+	bool Routine::hasSeparateLFInput()const
+	{
+		return m_lowFreqInputs.hasSeparate();
+	}
+
+	void Routine::addPendingInput( ast::var::VariablePtr var
+		, uint32_t location )
+	{
+		m_lowFreqInputs.addPending( var, location );
+	}
+
+	void Routine::addPendingMbrInput( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, uint32_t location )
+	{
+		m_lowFreqInputs.addPendingMbr( outer
+			, mbrIndex
+			, flags
+			, location );
+	}
+
+	ast::expr::ExprPtr Routine::processPendingInput( std::string const & name )
+	{
+		return m_lowFreqInputs.processPending( name );
+	}
+
+	ast::expr::ExprPtr Routine::processPendingInput( ast::var::VariablePtr var )
+	{
+		return m_lowFreqInputs.processPending( var );
+	}
+
+	ast::expr::ExprPtr Routine::processPendingMbrInput( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, ExprAdapter & adapter )
+	{
+		return m_lowFreqInputs.processPendingMbr( outer
+			, mbrIndex
+			, flags
+			, adapter );
+	}
+
+	IOMapping & Routine::getHFOutputs()
+	{
+		return m_highFreqOutputs;
+	}
+
+	IOMapping & Routine::getLFOutputs()
+	{
+		return m_lowFreqOutputs;
+	}
+
+	bool Routine::isOutput( ast::Builtin builtin )
+	{
+		return m_highFreqOutputs.isValid( builtin );
+	}
+
+	bool Routine::hasSeparateHFOutput()const
+	{
+		return m_highFreqOutputs.hasSeparate();
+	}
+
+	void Routine::addOutputVar( ast::var::VariablePtr var
+		, uint32_t location )
+	{
+		if ( !var->isBuiltin()
+			|| isHighFreq( var->getBuiltin(), false ) )
+		{
+			m_highFreqOutputs.addPending( var, location );
+
+			if ( needsSeparateFunc )
+			{
+				m_highFreqOutputs.processPending( var );
+			}
+		}
+		else
+		{
+			m_lowFreqOutputs.addPending( var, location );
+
+			if ( needsSeparateFunc )
+			{
+				m_lowFreqOutputs.processPending( var );
+			}
+		}
+	}
+
+	bool Routine::hasSeparateLFOutput()const
+	{
+		return m_lowFreqOutputs.hasSeparate();
+	}
+
+	void Routine::addPendingOutput( ast::var::VariablePtr var
+		, uint32_t location )
+	{
+		if ( !var->isBuiltin()
+			|| isHighFreq( var->getBuiltin(), false ) )
+		{
+			m_highFreqOutputs.addPending( var, location );
+		}
+		else
+		{
+			m_lowFreqOutputs.addPending( var, location );
+		}
+	}
+
+	void Routine::addPendingMbrOutput( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, uint32_t location )
+	{
+		auto mbr = getStructType( outer->getType() )->getMember( mbrIndex );
+
+		if ( !flags.isBuiltin()
+			|| isHighFreq( mbr.builtin, false ) )
+		{
+			m_highFreqOutputs.addPendingMbr( outer
+				, mbrIndex
+				, flags
+				, location );
+		}
+		else
+		{
+			m_lowFreqOutputs.addPendingMbr( outer
+				, mbrIndex
+				, flags
+				, location );
+		}
+	}
+
+	ast::expr::ExprPtr Routine::processPendingOutput( std::string const & name )
+	{
+		auto result = m_highFreqOutputs.processPending( name );
+
+		if ( !result )
+		{
+			result = m_lowFreqOutputs.processPending( name );
+		}
+
+		return result;
+	}
+
+	ast::expr::ExprPtr Routine::processPendingOutput( ast::var::VariablePtr var )
+	{
+		auto result = m_highFreqOutputs.processPending( var );
+
+		if ( !result )
+		{
+			result = m_lowFreqOutputs.processPending( var );
+		}
+
+		return result;
+	}
+
+	ast::expr::ExprPtr Routine::processPendingMbrOutput( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, ExprAdapter & adapter )
+	{
+		auto result = m_highFreqOutputs.processPendingMbr( outer
+			, mbrIndex
+			, flags
+			, adapter );
+
+		if ( !result )
+		{
+			result = m_lowFreqOutputs.processPendingMbr( outer
+				, mbrIndex
+				, flags
+				, adapter );
+		}
+
+		return result;
+	}
+
+	void Routine::registerInputMbr( ast::var::VariablePtr var
+		, uint64_t outerFlags
+		, ast::Builtin mbrBuiltin
+		, uint32_t mbrIndex
+		, uint32_t mbrLocation )
+	{
+		auto mbrFlags = ( outerFlags
+			| ( ( mbrBuiltin == ast::Builtin::eNone )
+				? ast::var::Flag::eNone
+				: ast::var::Flag::eBuiltin ) );
+		mbrLocation = ( ( mbrBuiltin == ast::Builtin::eNone )
+			? mbrLocation
+			: ast::type::Struct::InvalidLocation );
+		m_lowFreqInputs.addPendingMbr( var
+			, mbrIndex
+			, mbrFlags
+			, mbrLocation );
+	}
+
+	void Routine::registerOutputMbr( ast::var::VariablePtr var
+		, uint64_t outerFlags
+		, ast::Builtin mbrBuiltin
+		, uint32_t mbrIndex
+		, uint32_t mbrLocation )
+	{
+		auto mbrFlags = ( outerFlags
+			| ( ( mbrBuiltin == ast::Builtin::eNone )
+				? ast::var::Flag::eNone
+				: ast::var::Flag::eBuiltin ) );
+		mbrLocation = ( ( mbrBuiltin == ast::Builtin::eNone )
+			? mbrLocation
+			: ast::type::Struct::InvalidLocation );
+
+		if ( isHighFreq( mbrBuiltin, false ) )
+		{
+			m_highFreqOutputs.addPendingMbr( var
+				, mbrIndex
+				, mbrFlags
+				, mbrLocation );
+		}
+		else
+		{
+			m_lowFreqOutputs.addPendingMbr( var
+				, mbrIndex
+				, mbrFlags
+				, mbrLocation );
+		}
+	}
+
+	//*********************************************************************************************
+
+	AdaptationData::AdaptationData( HlslShader & pshader )
+		: m_highFreqInputs{ pshader, getMode( pshader.getType(), true, true, true ), true, false, "Global" }
+		, m_patchInputs{ ( pshader.getType() == ast::ShaderStage::eTessellationEvaluation
+			? std::make_unique< IOMapping >( pshader, getMode( pshader.getType(), true, true, true ), true, true, "Global" )
+			: nullptr ) }
+		, shader{ &pshader }
+	{
+		m_routines.emplace( "main"
+			, std::make_unique< Routine >( pshader, this, true, "main" ) );
+		m_mainEntryPoint = m_routines["main"].get();
+	}
+
+	void AdaptationData::addEntryPoint( ast::stmt::FunctionDecl const & stmt )
+	{
+		m_routines.emplace( stmt.getName()
+			, std::make_unique< Routine >( *shader
+				, this
+				, stmt.isEntryPoint()
+				, stmt.getName() ) );
+	}
+
+	void AdaptationData::updateCurrentEntryPoint( ast::stmt::FunctionDecl const * stmt )
+	{
+		if ( stmt )
+		{
+			if ( !stmt->isEntryPoint() )
+			{
+				m_currentRoutine = m_routines[stmt->getName()].get();
+			}
+			else
+			{
+				m_currentRoutine = m_mainEntryPoint;
+			}
+		}
+		else
+		{
+			m_currentRoutine = nullptr;
+		}
+	}
+
+	bool AdaptationData::needsSeparateFunc()const
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->needsSeparateFunc;
+	}
+
+	void AdaptationData::initialiseEntryPoint( ast::stmt::FunctionDecl const & stmt )
+	{
+		assert( m_currentRoutine );
+		auto funcType = stmt.getType();
+		auto isEntryPoint = stmt.isEntryPoint();
+
+		for ( auto & param : *funcType )
+		{
+			auto type = param->getType();
+
+			switch ( type->getKind() )
+			{
+			case ast::type::Kind::eFragmentInput:
+				registerParam( param, static_cast< ast::type::FragmentInput const & >( *type ) );
+				break;
+			case ast::type::Kind::eGeometryOutput:
+				registerParam( param, static_cast< ast::type::GeometryOutput const & >( *type ) );
+				break;
+			case ast::type::Kind::eGeometryInput:
+				registerParam( param, static_cast< ast::type::GeometryInput const & >( *type ) );
+				break;
+			case ast::type::Kind::eTessellationInputPatch:
+				registerParam( param, static_cast< ast::type::TessellationInputPatch const & >( *type ) );
+				break;
+			case ast::type::Kind::eTessellationControlInput:
+				registerParam( param, static_cast< ast::type::TessellationControlInput const & >( *type ), isEntryPoint );
+				break;
+			case ast::type::Kind::eTessellationEvaluationInput:
+				registerParam( param, static_cast< ast::type::TessellationEvaluationInput const & >( *type ) );
+				break;
+			case ast::type::Kind::eComputeInput:
+				registerParam( param, static_cast< ast::type::ComputeInput const & >( *type ) );
+				break;
+			case ast::type::Kind::eTessellationOutputPatch:
+				registerParam( param, static_cast< ast::type::TessellationOutputPatch const & >( *type ), isEntryPoint );
+				break;
+			case ast::type::Kind::eTessellationControlOutput:
+				registerParam( param, static_cast< ast::type::TessellationControlOutput const & >( *type ), isEntryPoint );
+				break;
+			default:
+				{
+					if ( type->getKind() == ast::type::Kind::eArray )
+					{
+						auto & arrayType = static_cast< ast::type::Array const & >( *type );
+						type = arrayType.getType();
+					}
+
+					if ( isStructType( type ) )
+					{
+						auto structType = getStructType( type );
+
+						if ( structType->isShaderInput() )
+						{
+							registerInput( param
+								, static_cast< ast::type::IOStruct const & >( *structType )
+								, isEntryPoint );
+						}
+						else if ( structType->isShaderOutput() )
+						{
+							registerOutput( param
+								, static_cast< ast::type::IOStruct const & >( *structType )
+								, isEntryPoint );
+						}
+						else
+						{
+							uint32_t index = 0u;
+
+							for ( auto & mbr : *structType )
+							{
+								if ( mbr.builtin != ast::Builtin::eNone )
+								{
+									if ( isShaderInput( mbr.builtin, shader->getType() ) )
+									{
+										registerInputMbr( param
+											, uint64_t( ast::var::Flag::eShaderInput )
+											, mbr.builtin
+											, index++
+											, mbr.location );
+									}
+									else
+									{
+										registerInputMbr( param
+											, uint64_t( ast::var::Flag::eShaderOutput )
+											, mbr.builtin
+											, index++
+											, mbr.location );
+									}
+								}
+							}
+						}
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	ast::stmt::ContainerPtr AdaptationData::writeGlobals( std::unordered_set< ast::type::StructPtr > & declaredStructs )
+	{
+		auto cont = ast::stmt::makeContainer();
+		assert( m_currentRoutine );
+
+		if ( m_currentRoutine == m_mainEntryPoint )
+		{
+			m_highFreqInputs.writeGlobals( *cont
+				, declaredStructs );
+		}
+
+		if ( m_patchInputs )
+		{
+			m_patchInputs->writeGlobals( *cont
+				, declaredStructs );
+		}
+
+		m_currentRoutine->writeGlobals( *cont
+			, declaredStructs );
+		return cont;
+	}
+
+	ast::stmt::ContainerPtr AdaptationData::writeLocalesBegin()
+	{
+		auto cont = ast::stmt::makeContainer();
+		assert( m_currentRoutine );
+
+		if ( m_currentRoutine == m_mainEntryPoint )
+		{
+			m_highFreqInputs.writeLocalesBegin( *cont );
+		}
+
+		if ( m_patchInputs )
+		{
+			m_patchInputs->writeLocalesBegin( *cont );
+		}
+
+		m_currentRoutine->writeLocalesBegin( *cont );
+		return cont;
+	}
+
+	ast::stmt::ContainerPtr AdaptationData::writeLocalesEnd()
+	{
+		auto cont = ast::stmt::makeContainer();
+		assert( m_currentRoutine );
+
+		if ( m_currentRoutine == m_mainEntryPoint )
+		{
+			m_highFreqInputs.writeLocalesEnd( *cont );
+		}
+
+		if ( m_patchInputs )
+		{
+			m_patchInputs->writeLocalesEnd( *cont );
+		}
+
+		m_currentRoutine->writeLocalesEnd( *cont );
+		return cont;
+	}
+
+	ast::type::TypePtr AdaptationData::fillParameters( ast::var::VariableList & parameters
+		, ast::stmt::Container & stmt )
+	{
+		auto result = getNonNull( m_highFreqInputs.fillParameters( parameters, stmt ), nullptr );
+
+		if ( m_patchInputs )
+		{
+			result = getNonNull( m_patchInputs->fillParameters( parameters, stmt ), nullptr );
+		}
+
+		assert( m_currentRoutine );
+		result = getNonNull( m_currentRoutine->fillParameters( parameters, stmt ), result );
+		return result;
+	}
+
+	ast::expr::ExprPtr AdaptationData::processPendingMbr( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, ExprAdapter & adapter )
+	{
+		if ( flags.isShaderInput() )
+		{
+			return processPendingMbrInput( outer
+				, mbrIndex
+				, flags
+				, adapter );
+		}
+
+		if ( flags.isShaderOutput() )
+		{
+			return processPendingMbrOutput( outer
+				, mbrIndex
+				, flags
+				, adapter );
+		}
+
+		return nullptr;
+	}
+
+	ast::expr::ExprPtr AdaptationData::processPending( ast::var::VariablePtr var )
+	{
+		if ( !m_currentRoutine )
+		{
+			return nullptr;
+		}
+
+		auto it = m_currentRoutine->paramToEntryPoint.find( var );
+
+		if ( it != m_currentRoutine->paramToEntryPoint.end() )
+		{
+			return ast::expr::makeIdentifier( var->getType()->getCache()
+				, it->second );
+		}
+
+		if ( var->isShaderInput() )
+		{
+			return processPendingInput( var );
+		}
+
+		if ( var->isShaderOutput() )
+		{
+			return processPendingOutput( var );
+		}
+
+		return nullptr;
+	}
+
+	void AdaptationData::addMbrBuiltin( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, uint32_t location )
+	{
+		if ( flags.isShaderOutput() )
+		{
+			addPendingMbrOutput( outer
+				, mbrIndex
+				, flags
+				, location );
+		}
+		else
+		{
+			addPendingMbrInput( outer
+				, mbrIndex
+				, flags
+				, location );
+		}
+	}
+
+	IOMapping & AdaptationData::getHFInputs()
+	{
+		return m_highFreqInputs;
+	}
+
+	IOMapping & AdaptationData::getLFInputs()
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->getLFInputs();
+	}
+
+	void AdaptationData::addInputVar( ast::var::VariablePtr var
+		, uint32_t location )
+	{
+		auto & entryPoint = m_currentRoutine
+			? *m_currentRoutine
+			: *m_mainEntryPoint;
+
+		if ( !var->isBuiltin()
+			|| isHighFreq( var->getBuiltin(), true ) )
+		{
+			if ( m_patchInputs && var->isPatchInput() )
+			{
+				m_patchInputs->addPending( var, location );
+
+				if ( entryPoint.needsSeparateFunc )
+				{
+					m_patchInputs->processPending( var );
+				}
+			}
+			else
+			{
+				m_highFreqInputs.addPending( var, location );
+
+				if ( entryPoint.needsSeparateFunc )
+				{
+					m_highFreqInputs.processPending( var );
+				}
+			}
+		}
+		else
+		{
+			entryPoint.addInputVar( var, location );
+		}
+	}
+
+	bool AdaptationData::isInput( ast::Builtin builtin )
+	{
+		return m_highFreqInputs.isValid( builtin );
+	}
+
+	bool AdaptationData::hasSeparateHFInput()const
+	{
+		return m_highFreqInputs.hasSeparate();
+	}
+
+	bool AdaptationData::hasSeparateLFInput()const
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->hasSeparateLFInput();
+	}
+
+	void AdaptationData::addPendingInput( ast::var::VariablePtr var
+		, uint32_t location )
+	{
+		auto & entryPoint = m_currentRoutine
+			? *m_currentRoutine
+			: *m_mainEntryPoint;
+
+		if ( !var->isBuiltin()
+			|| isHighFreq( var->getBuiltin(), true ) )
+		{
+			if ( m_patchInputs && var->isPatchInput() )
+			{
+				m_patchInputs->addPending( var, location );
+			}
+			else
+			{
+				m_highFreqInputs.addPending( var, location );
+			}
+		}
+		else
+		{
+			entryPoint.addPendingInput( var, location );
+		}
+	}
+
+	void AdaptationData::addPendingMbrInput( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, uint32_t location )
+	{
+		assert( m_currentRoutine );
+		auto mbr = getStructType( outer->getType() )->getMember( mbrIndex );
+
+		if ( isHighFreq( mbr.builtin, true ) )
+		{
+			if ( m_patchInputs && flags.isPatchInput() )
+			{
+				m_patchInputs->addPendingMbr( outer
+					, mbrIndex
+					, flags
+					, location );
+			}
+			else
+			{
+				m_highFreqInputs.addPendingMbr( outer
+					, mbrIndex
+					, flags
+					, location );
+			}
+		}
+		else
+		{
+			m_currentRoutine->addPendingMbrInput( outer
+				, mbrIndex
+				, flags
+				, location );
+		}
+	}
+
+	ast::expr::ExprPtr AdaptationData::processPendingInput( std::string const & name )
+	{
+		assert( m_currentRoutine );
+		auto result = m_highFreqInputs.processPending( name );
+
+		if ( m_patchInputs && !result )
+		{
+			result = m_patchInputs->processPending( name );
+		}
+
+		if ( !result )
+		{
+			result = m_currentRoutine->processPendingInput( name );
+		}
+
+		return result;
+	}
+
+	ast::expr::ExprPtr AdaptationData::processPendingInput( ast::var::VariablePtr var )
+	{
+		assert( m_currentRoutine );
+		auto result = m_highFreqInputs.processPending( var );
+
+		if ( m_patchInputs && !result )
+		{
+			result = m_patchInputs->processPending( var );
+		}
+
+		if ( !result )
+		{
+			result = m_currentRoutine->processPendingInput( var );
+		}
+
+		return result;
+	}
+
+	ast::expr::ExprPtr AdaptationData::processPendingMbrInput( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, ExprAdapter & adapter )
+	{
+		assert( m_currentRoutine );
+		auto result = m_highFreqInputs.processPendingMbr( outer
+			, mbrIndex
+			, flags
+			, adapter );
+
+		if ( m_patchInputs && !result )
+		{
+			result = m_patchInputs->processPendingMbr( outer
+				, mbrIndex
+				, flags
+				, adapter );
+		}
+
+		if ( !result )
+		{
+			result = m_currentRoutine->processPendingMbrInput( outer
+				, mbrIndex
+				, flags
+				, adapter );
+		}
+
+		return result;
+	}
+
+	IOMapping & AdaptationData::getHFOutputs()
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->getHFOutputs();
+	}
+
+	IOMapping & AdaptationData::getLFOutputs()
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->getLFOutputs();
+	}
+
+	void AdaptationData::addOutputVar( ast::var::VariablePtr var
+		, uint32_t location )
+	{
+		auto & entryPoint = m_currentRoutine
+			? *m_currentRoutine
+			: *m_mainEntryPoint;
+		entryPoint.addOutputVar( var, location );
+	}
+
+	bool AdaptationData::isOutput( ast::Builtin builtin )
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->isOutput( builtin );
+	}
+
+	bool AdaptationData::hasSeparateHFOutput()const
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->hasSeparateHFOutput();
+	}
+
+	bool AdaptationData::hasSeparateLFOutput()const
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->hasSeparateLFOutput();
+	}
+
+	void AdaptationData::addPendingOutput( ast::var::VariablePtr var
+		, uint32_t location )
+	{
+		auto & entryPoint = m_currentRoutine
+			? *m_currentRoutine
+			: *m_mainEntryPoint;
+		entryPoint.addPendingOutput( var, location );
+	}
+
+	void AdaptationData::addPendingMbrOutput( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, uint32_t location )
+	{
+		assert( m_currentRoutine );
+		m_currentRoutine->addPendingMbrOutput( outer
+			, mbrIndex
+			, flags
+			, location );
+	}
+
+	ast::expr::ExprPtr AdaptationData::processPendingOutput( std::string const & name )
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->processPendingOutput( name );
+	}
+
+	ast::expr::ExprPtr AdaptationData::processPendingOutput( ast::var::VariablePtr var )
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->processPendingOutput( var );
+	}
+
+	ast::expr::ExprPtr AdaptationData::processPendingMbrOutput( ast::expr::Expr * outer
+		, uint32_t mbrIndex
+		, ast::var::FlagHolder const & flags
+		, ExprAdapter & adapter )
+	{
+		assert( m_currentRoutine );
+		return m_currentRoutine->processPendingMbrOutput( outer
+			, mbrIndex
+			, flags
+			, adapter );
+	}
+
+	void AdaptationData::declareStruct( ast::type::StructPtr const & structType
+		, ast::stmt::Container * stmt )
+	{
+		if ( stmt
+			&& m_declaredStructs.emplace( structType ).second )
+		{
+			stmt->addStmt( ast::stmt::makeStructureDecl( structType ) );
+		}
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::FragmentInput const & fragType )
+	{
+		assert( m_currentRoutine );
+		auto type = fragType.getType();
+
+		if ( isStructType( type ) )
+		{
+			auto & structType = *getStructType( type );
+			assert( structType.isShaderInput() );
+			registerInput( var
+				, static_cast< ast::type::IOStruct const & >( structType )
+				, true );
+		}
+
+		m_highFreqInputs.initialiseMainVar( var
+			, ast::type::makeFragmentInputType( m_highFreqInputs.paramStruct
+				, fragType.getOrigin()
+				, fragType.getCenter() )
+			, ast::var::Flag::eInputParam | ast::var::Flag::eShaderInput
+			, m_currentRoutine->paramToEntryPoint );
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::ComputeInput const & compType )
+	{
+		assert( m_currentRoutine );
+		auto type = compType.getType();
+
+		if ( isStructType( type ) )
+		{
+			auto & structType = *getStructType( type );
+			assert( structType.isShaderInput() );
+			registerInput( var
+				, static_cast< ast::type::IOStruct const & >( structType )
+				, true );
+		}
+
+		m_currentRoutine->m_lowFreqInputs.initialiseMainVar( var
+			, ast::type::makeComputeInputType( m_currentRoutine->m_lowFreqInputs.paramStruct
+				, compType.getLocalSizeX()
+				, compType.getLocalSizeY()
+				, compType.getLocalSizeZ() )
+			, ast::var::Flag::eInputParam | ast::var::Flag::eShaderInput
+			, m_currentRoutine->paramToEntryPoint );
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::GeometryInput const & geomType )
+	{
+		assert( m_currentRoutine );
+		auto type = geomType.getType();
+
+		if ( isStructType( type ) )
+		{
+			auto & structType = *getStructType( type );
+			assert( structType.isShaderInput() );
+			registerInput( var
+				, static_cast< ast::type::IOStruct const & >( structType )
+				, true );
+		}
+
+		m_highFreqInputs.initialiseMainVar( var
+			, ast::type::makeGeometryInputType( m_highFreqInputs.paramStruct
+				, geomType.getLayout() )
+			, ast::var::Flag::eInputParam | ast::var::Flag::eShaderInput
+			, m_currentRoutine->paramToEntryPoint );
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::GeometryOutput const & geomType )
+	{
+		assert( m_currentRoutine );
+		auto type = geomType.getType();
+
+		if ( isStructType( type ) )
+		{
+			auto & structType = *getStructType( type );
+			assert( structType.isShaderOutput() );
+			registerOutput( var
+				, static_cast< ast::type::IOStruct const & >( structType )
+				, true );
+		}
+
+		m_currentRoutine->initialiseHFOutput( var, geomType );
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::TessellationInputPatch const & patchType )
+	{
+		assert( m_currentRoutine );
+		assert( m_patchInputs );
+		auto type = patchType.getType();
+
+		if ( isStructType( type ) )
+		{
+			auto structType = getStructType( type );
+			declareStruct( structType
+				, m_currentRoutine->globalDeclarations );
+		}
+
+		m_patchInputs->initialisePatchVar( var
+			, ast::type::makeTessellationInputPatchType( m_patchInputs->paramStruct
+				, patchType.getDomain()
+				, patchType.getLocation() )
+			, uint64_t( ast::var::Flag::eShaderInput )
+			, m_currentRoutine->paramToEntryPoint );
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::TessellationOutputPatch const & patchType
+		, bool isEntryPoint )
+	{
+		assert( m_currentRoutine );
+		auto type = patchType.getType();
+
+		if ( isStructType( type ) )
+		{
+			declareStruct( getStructType( type )
+				, m_currentRoutine->globalDeclarations );
+		}
+
+		m_currentRoutine->initialiseHFOutput( var, patchType );
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::TessellationControlInput const & tessType
+		, bool isEntryPoint )
+	{
+		assert( m_currentRoutine );
+		auto type = tessType.getType();
+
+		if ( type->getKind() == ast::type::Kind::eArray )
+		{
+			type = static_cast< ast::type::Array const & >( *type ).getType();
+		}
+
+		if ( isStructType( type ) )
+		{
+			auto & structType = *getStructType( type );
+			assert( structType.isShaderInput() );
+			registerInput( var
+				, static_cast< ast::type::IOStruct const & >( structType )
+				, isEntryPoint );
+		}
+
+		m_highFreqInputs.initialiseMainVar( var
+			, ast::type::makeTessellationControlInputType( m_highFreqInputs.paramStruct
+				, tessType.getInputVertices() )
+			, ast::var::Flag::eInputParam | ast::var::Flag::eShaderInput
+			, m_currentRoutine->paramToEntryPoint );
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::TessellationControlOutput const & tessType
+		, bool isEntryPoint )
+	{
+		assert( m_currentRoutine );
+		auto type = tessType.getType();
+
+		if ( type->getKind() == ast::type::Kind::eArray )
+		{
+			type = static_cast< ast::type::Array const & >( *type ).getType();
+		}
+
+		if ( isStructType( type ) )
+		{
+			auto & structType = *getStructType( type );
+			assert( structType.isShaderOutput() );
+			registerOutput( var
+				, static_cast< ast::type::IOStruct const & >( structType )
+				, isEntryPoint );
+		}
+
+		m_currentRoutine->initialiseHFOutput( var, tessType );
+	}
+
+	void AdaptationData::registerParam( ast::var::VariablePtr var
+		, ast::type::TessellationEvaluationInput const & tessType )
+	{
+		assert( m_currentRoutine );
+		auto type = tessType.getType();
+
+		if ( type->getKind() == ast::type::Kind::eArray )
+		{
+			type = static_cast< ast::type::Array const & >( *type ).getType();
+		}
+
+		if ( isStructType( type ) )
+		{
+			auto & structType = *getStructType( type );
+			assert( structType.isShaderInput() );
+			registerInput( var
+				, static_cast< ast::type::IOStruct const & >( structType )
+				, true );
+		}
+
+		m_highFreqInputs.initialiseMainVar( var
+			, ast::type::makeTessellationEvaluationInputType( m_highFreqInputs.paramStruct
+				, tessType.getDomain()
+				, tessType.getPartitioning()
+				, tessType.getPrimitiveOrdering()
+				, tessType.getInputVertices() )
+			, ast::var::Flag::eInputParam | ast::var::Flag::eShaderInput
+			, m_currentRoutine->paramToEntryPoint );
+	}
+
+	void AdaptationData::registerInput( ast::var::VariablePtr var
+		, ast::type::IOStruct const & structType
+		, bool isEntryPoint )
+	{
+		uint32_t mbrIndex = 0u;
+
+		for ( auto & mbr : structType )
+		{
+			registerInputMbr( var
+				, structType.getFlag()
+				, mbr.builtin
+				, mbrIndex++
+				, mbr.location );
+		}
+	}
+
+	void AdaptationData::registerOutput( ast::var::VariablePtr var
+		, ast::type::IOStruct const & structType
+		, bool isEntryPoint )
+	{
+		uint32_t mbrIndex = 0u;
+
+		for ( auto & mbr : structType )
+		{
+			registerOutputMbr( var
+				, structType.getFlag()
+				, mbr.builtin
+				, mbrIndex++
+				, mbr.location );
+		}
+	}
+
+	void AdaptationData::registerInputMbr( ast::var::VariablePtr var
+		, uint64_t outerFlags
+		, ast::Builtin mbrBuiltin
+		, uint32_t mbrIndex
+		, uint32_t mbrLocation )
+	{
+		assert( m_currentRoutine );
+		auto mbrFlags = ( outerFlags
+			| ( ( mbrBuiltin == ast::Builtin::eNone )
+				? ast::var::Flag::eNone
+				: ast::var::Flag::eBuiltin ) );
+		mbrLocation = ( ( mbrBuiltin == ast::Builtin::eNone )
+			? mbrLocation
+			: ast::type::Struct::InvalidLocation );
+
+		if ( isHighFreq( mbrBuiltin, true ) )
+		{
+			if ( m_patchInputs && checkFlag( outerFlags, ast::var::Flag::ePatchInput ) )
+			{
+				m_patchInputs->addPendingMbr( var
+					, mbrIndex
+					, mbrFlags
+					, mbrLocation );
+			}
+			else
+			{
+				m_highFreqInputs.addPendingMbr( var
+					, mbrIndex
+					, mbrFlags
+					, mbrLocation );
+			}
+		}
+		else
+		{
+			m_currentRoutine->registerInputMbr( var
+				, outerFlags
+				, mbrBuiltin
+				, mbrIndex
+				, mbrLocation );
+		}
+	}
+
+	void AdaptationData::registerOutputMbr( ast::var::VariablePtr var
+		, uint64_t outerFlags
+		, ast::Builtin mbrBuiltin
+		, uint32_t mbrIndex
+		, uint32_t mbrLocation )
+	{
+		assert( m_currentRoutine );
+		m_currentRoutine->registerOutputMbr( var
+			, outerFlags
+			, mbrBuiltin
+			, mbrIndex
+			, mbrLocation );
+	}
+
+	//*********************************************************************************************
+}

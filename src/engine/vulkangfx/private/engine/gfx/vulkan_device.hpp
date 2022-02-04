@@ -139,6 +139,7 @@ public:
 	Result<BackendDeviceResource, GfxResult> create_swap_chain(const SwapChainCreateInfo& in_create_info) override;
 	Result<BackendDeviceResource, GfxResult> create_shader(const ShaderCreateInfo& in_create_info) override;
 	Result<BackendDeviceResource, GfxResult> create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info) override;
+	Result<BackendDeviceResource, GfxResult> create_compute_pipeline(const ComputePipelineCreateInfo& in_create_info) override;
 	Result<BackendDeviceResource, GfxResult> create_render_pass(const RenderPassCreateInfo& in_create_info) override;
 	Result<BackendDeviceResource, GfxResult> create_command_pool(const CommandPoolCreateInfo& in_create_info) override;
 	Result<BackendDeviceResource, GfxResult> create_semaphore(const SemaphoreCreateInfo& in_create_info) override;
@@ -179,6 +180,7 @@ public:
 	void cmd_bind_pipeline(const BackendDeviceResource& in_list, 
 		const PipelineBindPoint in_bind_point, 
 		const BackendDeviceResource& in_pipeline) override;
+	void cmd_dispatch(const BackendDeviceResource& in_list, const uint32_t in_x, const uint32_t in_y, const uint32_t in_z) override;
 	void cmd_draw(const BackendDeviceResource& in_list,
 		const uint32_t in_vertex_count,
 		const uint32_t in_instance_count,

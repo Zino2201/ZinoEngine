@@ -3,6 +3,31 @@
 namespace ze::shadersystem
 {
 
+ShaderPermutationBuilder::ShaderPermutationBuilder(Shader& in_shader)
+	: shader(in_shader) {}
+
+void ShaderPermutationBuilder::add_option(std::string in_name, int32_t value)
+{
+	for(const auto& option : shader.get_options())
+	{
+		if(option.name == in_name)
+		{
+			if(option.type == ShaderOptionType::Bool)
+			{
+				id[option.id_index] = static_cast<bool>(value);
+			}
+			else
+			{
+				for(size_t i = 0; i < option.bit_width; ++i)
+				{
+					id[option.id_index + i] = value & 1;
+					value >>= 1;
+				}
+			}
+		}
+	}
+}
+
 Shader::Shader(ShaderManager& in_shader_manager, const ShaderDeclaration& in_declaration)
 	: shader_manager(in_shader_manager), declaration(in_declaration), total_permutation_count(1)
 {

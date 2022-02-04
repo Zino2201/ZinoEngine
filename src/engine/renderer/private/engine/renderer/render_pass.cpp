@@ -1,6 +1,5 @@
-#include "engine/renderer/RenderPass.hpp"
-
-#include "engine/renderer/World.hpp"
+#include "engine/renderer/render_pass.hpp"
+#include "engine/renderer/world.hpp"
 
 namespace ze::renderer
 {

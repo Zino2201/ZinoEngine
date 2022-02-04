@@ -2,7 +2,7 @@
 #include "engine/module/module_manager.hpp"
 #include "engine/shadersystem/shader.hpp"
 #include "engine/filesystem/filesystem_module.hpp"
-#include "shaderbuilder.hpp"
+#include "zeshader_compiler.hpp"
 
 namespace ze::shadersystem
 {
@@ -41,9 +41,11 @@ void ShaderManager::build_shader(const std::filesystem::path& in_path)
 	auto file = filesystem.read(in_path);
 	if (file)
 	{
-		const std::string code(std::istreambuf_iterator(file.get_value().get()),
-			std::istreambuf_iterator<char>());
-		register_shader(build_lua_shader(code));
+		auto result = compile_zeshader(std::move(file.get_value()));
+		if(result)
+			register_shader(result.get_value());
+		else
+			logger::error("Failed to parse shader {}: {}", in_path.string(), result.get_error());
 	}
 	else
 	{

@@ -2,8 +2,8 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include "engine/gfx/Device.hpp"
-#include "RenderPass.hpp"
+#include "engine/gfx/device.hpp"
+#include "render_pass.hpp"
 
 namespace ze::renderer
 {
@@ -41,7 +41,7 @@ struct MeshBatch
 };
 
 /**
- * A simple render node that can be rendered
+ * A simple renderable object in a graph
  */
 struct RenderNode
 {
@@ -51,7 +51,6 @@ struct RenderNode
 		Material& material;
 		gfx::BufferHandle vertex_buffer;
 		gfx::BufferHandle index_buffer;
-	//	 https://github.com/EpicGames/UnrealEngine/blob/99b6e203a15d04fc7bbbf554c421a985c1ccb8f1/Engine/Source/Runtime/Engine/Private/InstancedStaticMesh.cpp
 		uint32_t index_count;
 		uint32_t instance_count;
 		uint32_t first_index;
@@ -59,7 +58,7 @@ struct RenderNode
 		uint32_t first_instance;
 	};
 
-	glm::vec3 position;
+	glm::dvec3 position;
 	glm::quat rotation;
 	glm::vec3 scale;
 

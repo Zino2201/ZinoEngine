@@ -1,5 +1,6 @@
 #include "engine/gfx/device.hpp"
 #include "engine/gfx/backend_device.hpp"
+#include "engine/gfx/compute_pipeline.hpp"
 
 namespace ze::gfx
 {
@@ -118,30 +119,53 @@ void CommandList::prepare_draw()
 	update_descriptors();
 }
 
+void CommandList::prepare_compute()
+{
+	ZE_CHECKF(is_compute_shader, "No compute shader was bound!");
+	
+	if(pipeline_state_dirty)
+		update_pipeline_state();
+
+	update_descriptors();
+}
+
 void CommandList::update_pipeline_state()
 {
 	ZE_CHECKF(pipeline_layout, "No pipeline layout was bound!");
-	
-	GfxPipelineCreateInfo create_info(material_state.stages,
-		material_state.vertex_input,
-		material_state.input_assembly,
-		material_state.rasterizer,
-		render_pass_state.multisampling,
-		render_pass_state.depth_stencil,
-		render_pass_state.color_blend,
-		Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource(),
-		render_pass,
-		0);
 
-	ZE_CHECKF(pipeline_layout, "No pipeline layout set!");
-	ZE_CHECKF(render_pass, "No render pass set!");
+	if (is_compute_shader)
+	{
+		ComputePipelineCreateInfo create_info(compute_shader,
+			Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource());
 
-	auto pipeline = device.get_or_create_pipeline(create_info);
-	
-	device.get_backend_device()->cmd_bind_pipeline(
-		resource,
-		PipelineBindPoint::Gfx,
-		pipeline);
+		auto pipeline = device.get_or_create_compute_pipeline(create_info);
+		device.get_backend_device()->cmd_bind_pipeline(
+			resource,
+			PipelineBindPoint::Compute,
+			pipeline);
+	}
+	else
+	{
+		GfxPipelineCreateInfo create_info(material_state.stages,
+			material_state.vertex_input,
+			material_state.input_assembly,
+			material_state.rasterizer,
+			render_pass_state.multisampling,
+			render_pass_state.depth_stencil,
+			render_pass_state.color_blend,
+			Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource(),
+			render_pass,
+			0);
+
+		ZE_CHECKF(render_pass, "No render pass set!");
+
+		auto pipeline = device.get_or_create_gfx_pipeline(create_info);
+
+		device.get_backend_device()->cmd_bind_pipeline(
+			resource,
+			PipelineBindPoint::Gfx,
+			pipeline);
+	}
 	
 	pipeline_state_dirty = false;	
 }
@@ -198,6 +222,9 @@ Device::~Device()
 	}
 
 	for(auto& [create_info, pipeline] : gfx_pipelines)
+		get_backend_device()->destroy_pipeline(pipeline);
+
+	for(auto& [create_info, pipeline] : compute_pipelines)
 		get_backend_device()->destroy_pipeline(pipeline);
 
 	for(auto& [create_info, rp] : render_passes)
@@ -815,6 +842,20 @@ void Device::cmd_draw_indexed(const CommandListHandle& in_list,
 		in_first_instance);
 }
 
+void Device::cmd_dispatch(const CommandListHandle& in_list, 
+	const uint32_t in_x, 
+	const uint32_t in_y, 
+	const uint32_t in_z)
+{
+	auto list = cast_handle<CommandList>(in_list);
+	list->prepare_compute();
+
+	backend_device->cmd_dispatch(list->get_resource(),
+		in_x,
+		in_y,
+		in_z);
+}
+
 void Device::cmd_set_render_pass_state(const CommandListHandle& in_cmd_list, 
 	const PipelineRenderPassState& in_state)
 {
@@ -836,11 +877,18 @@ void Device::cmd_set_scissor(const CommandListHandle& in_cmd_list, const Rect2D&
 	backend_device->cmd_set_scissors(list->get_resource(), 0, scissors);
 }
 
-void Device::cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, 
+void Device::cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list,
 	const PipelineLayoutHandle& in_handle)
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	list->set_pipeline_layout(in_handle);
+}
+
+void Device::cmd_bind_compute_shader(const CommandListHandle& in_cmd_list,
+	const PipelineShaderStage& in_shader)
+{
+	auto list = cast_handle<CommandList>(in_cmd_list);
+	list->set_compute_shader(in_shader);
 }
 
 void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list, 
@@ -1038,7 +1086,7 @@ BackendDeviceResource Device::get_or_create_render_pass(const RenderPassCreateIn
 	return rp.get_value();
 }
 
-BackendDeviceResource Device::get_or_create_pipeline(const GfxPipelineCreateInfo& in_create_info)
+BackendDeviceResource Device::get_or_create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info)
 {
 	auto it = gfx_pipelines.find(in_create_info);
 	if(it != gfx_pipelines.end())
@@ -1047,6 +1095,18 @@ BackendDeviceResource Device::get_or_create_pipeline(const GfxPipelineCreateInfo
 	auto pipeline = backend_device->create_gfx_pipeline(in_create_info);
 	ZE_ASSERT(pipeline.has_value());
 	gfx_pipelines.insert({ in_create_info, pipeline.get_value() });
+	return pipeline.get_value();
+}
+
+BackendDeviceResource Device::get_or_create_compute_pipeline(const ComputePipelineCreateInfo& in_create_info)
+{
+	auto it = compute_pipelines.find(in_create_info);
+	if (it != compute_pipelines.end())
+		return it->second;
+
+	auto pipeline = backend_device->create_compute_pipeline(in_create_info);
+	ZE_ASSERT(pipeline.has_value());
+	compute_pipelines.insert({ in_create_info, pipeline.get_value() });
 	return pipeline.get_value();
 }
 

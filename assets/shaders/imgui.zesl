@@ -1,0 +1,55 @@
+[[input]]
+struct VertexInput
+{
+	[[location(0)]] position : Vector2<float>;
+	[[location(1)]] texcoord : Vector2<float>;
+	[[location(2)]] color : Vector4<float>;
+}
+
+[[output]]
+struct VertexOutput
+{
+	[[builtin(position)]] position : Vector4<float>;
+	[[location(0)]] texcoord : Vector2<float>;
+	[[location(1)]] color : Vector4<float>;
+}
+
+[[input]]
+struct FragmentInput
+{
+	[[location(0)]] position : Vector2<float>;
+	[[location(1)]] texcoord : Vector2<float>;
+	[[location(2)]] color : Vector4<float>;
+}
+
+struct GlobalData
+{
+	translate : Vector2<float>;
+	scale : Vector2<float>;
+}
+
+[[parameter(0)]]
+let global_data : UniformBuffer<GlobalData>;
+
+[[parameter(1)]]
+let texture : Texture2D;
+
+[[parameter(2)]]
+let texture_sampler : Sampler;
+
+[[entry(vertex)]]
+fn vertex(input : VertexInput) -> VertexOutput
+{
+	let output : VertexOutput;
+
+	output.position = Vector4<float>(input.position * global_data.scale + global_data.translate, 0.0, 1.0);
+	output.texcoord = input.texcoord;
+	output.color = input.color;
+	return output;
+}
+
+[[entry(fragment)]]
+fn fragment(input : VertexOutput) -> Vector4<float>
+{
+	return input.color * texture.Sample(texture_sampler, input.texcoord);
+}

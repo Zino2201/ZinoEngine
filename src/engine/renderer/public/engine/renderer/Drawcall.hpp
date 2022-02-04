@@ -29,7 +29,7 @@ struct GPUDrawcall
 			int32_t vertex_offset;
 			uint32_t first_instance;
 		};
-#if 0
+
 		struct /** No index buffer bound */
 		{
 			uint32_t vertex_count;	
@@ -37,7 +37,6 @@ struct GPUDrawcall
 			uint32_t first_vertex;	
 			uint32_t first_instance;	
 		};
-#endif
 	};
 };
 

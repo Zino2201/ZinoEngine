@@ -1,6 +1,5 @@
 #include "engine/imgui/imgui.hpp"
 #include <Unknwn.h>
-#include <dxcapi.h>
 #include <fstream>
 #include <glm/glm.hpp>
 #include "engine/shadersystem/shader_manager.hpp"
@@ -17,7 +16,6 @@ SamplerHandle sampler;
 TextureHandle font_texture;
 TextureViewHandle font_texture_view;
 std::unique_ptr<shadersystem::ShaderInstance> shader_instance;
-PipelineLayoutHandle pipeline_layout;
 std::vector<PipelineShaderStage> shader_stages;
 PipelineRenderPassState render_pass_state;
 PipelineMaterialState material_state;
@@ -198,7 +196,7 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 
 	{
 		auto result = get_device()->create_sampler(SamplerInfo());
-		ZE_ASSERTF(result.has_value(), "Failed to create ImGui UBO: {}", result.get_error());
+		ZE_ASSERTF(result.has_value(), "Failed to create ImGui UBO: {}", std::to_string(result.get_error()));
 		sampler = result.get_value();
 	}
 
@@ -217,14 +215,14 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 			1,
 			TextureUsageFlags(TextureUsageFlagBits::Sampled),
 			{ data, data + (width * height * 4)}).set_debug_name("ImGui Font Texture"));
-		ZE_ASSERTF(tex_result.has_value(), "Failed to create ImGui font texture: {}", tex_result.get_error());
+		ZE_ASSERTF(tex_result.has_value(), "Failed to create ImGui font texture: {}", std::to_string(tex_result.get_error()));
 
 		font_texture = tex_result.get_value();
 
 		auto view_result = get_device()->create_texture_view(TextureViewInfo::make_2d(
 			font_texture,
 			Format::R8G8B8A8Srgb));
-		ZE_ASSERTF(view_result.has_value(), "Failed to create ImGui font texture view: {}", view_result.get_error());
+		ZE_ASSERTF(view_result.has_value(), "Failed to create ImGui font texture view: {}", std::to_string(view_result.get_error()));
 		font_texture_view = view_result.get_value();
 	}
 
@@ -232,32 +230,11 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 	{
 		shader_instance = in_shader_manager.get_shader("ImGui")->instantiate({});
 		const auto& shader_map = shader_instance->get_permutation().get_shader_map();
+		ZE_ASSERTF(shader_map.size() == 2, "Failed to create ImGui shaders, see log. Exiting.");
 		auto vertex_shader = shader_map.find(ShaderStageFlagBits::Vertex);
 		auto fragment_shader = shader_map.find(ShaderStageFlagBits::Fragment);
 		shader_stages.emplace_back(ShaderStageFlagBits::Vertex, Device::get_backend_shader(*vertex_shader->second), "main");
 		shader_stages.emplace_back(ShaderStageFlagBits::Fragment, Device::get_backend_shader(*fragment_shader->second), "main");
-	}
-
-	/** Create pipeline layout */
-	{
-		std::array bindings = {
-			DescriptorSetLayoutBinding(0, 
-				DescriptorType::UniformBuffer, 
-				1, 
-				ShaderStageFlags(ShaderStageFlagBits::Vertex)),
-			DescriptorSetLayoutBinding(1, 
-				DescriptorType::Sampler, 
-				1, 
-				ShaderStageFlags(ShaderStageFlagBits::Fragment)),
-			DescriptorSetLayoutBinding(2, 
-				DescriptorType::SampledTexture, 
-				1, 
-				ShaderStageFlags(ShaderStageFlagBits::Fragment)),
-		};
-		std::array set_layouts = { DescriptorSetLayoutCreateInfo(bindings) };
-		auto result = get_device()->create_pipeline_layout(PipelineLayoutInfo({ set_layouts, {} }));
-		ZE_ASSERTF(result.has_value(), "Failed to create ImGui pipeline layout: {}", result.get_error());
-		pipeline_layout = result.get_value();
 	}
 
 	/** Setup render pass state */
@@ -293,7 +270,6 @@ void initialize_main_viewport(platform::Window& in_window, SwapchainHandle in_sw
 {
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
 
-	const ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
 	auto* platform_data = new ViewportPlatformData;
 	auto* renderer_data = new ViewportRendererData;
 
@@ -439,7 +415,7 @@ void draw_viewport(ImGuiViewport* viewport)
 
 	get_device()->cmd_begin_render_pass(list, render_pass_info);
 
-	get_device()->cmd_bind_pipeline_layout(list, pipeline_layout);
+	get_device()->cmd_bind_pipeline_layout(list, shader_instance->get_permutation().get_pipeline_layout());
 	get_device()->cmd_set_render_pass_state(list, render_pass_state);
 	get_device()->cmd_set_material_state(list, material_state);
 
@@ -567,8 +543,6 @@ void update_monitors()
 void destroy()
 {
 	mouse_cursors.clear();
-
-	get_device()->destroy_pipeline_layout(pipeline_layout);
 
 	shader_instance.reset();
 

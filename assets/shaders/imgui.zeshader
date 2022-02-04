@@ -1,55 +1,47 @@
-shader "ImGui" 
+shader "ImGui"
 {
-    parameter { name="global_data", type=UniformBuffer, members = 
-        {
-            { name="translate", type=float2 },    
-            { name="scale", type=float2 },    
-        },
-        stages = { "vertex" }
-    },
-    parameter { name="texture_sampler", type=Sampler, stages = { "fragment" } },
-    parameter { name="texture", type=Texture2D, stages = { "fragment" } },
+	struct VertexInput
+	{
+		float2 position : POSITION;
+		float2 texcoord : TEXCOORD0;
+		float4 color : TEXCOORD1;
+	};
 
-    depth_stencil_state 
-    {
-        enable_depth_test = false,
-        enable_depth_write = false,
-    },
+	struct VertexOutput
+	{
+		float4 position : SV_POSITION;
+		float2 texcoord : TEXCOORD0;
+		float4 color : TEXCOORD1;
+	};
 
-    stage "vertex"
-    {
-        input
-        {
-            { name="position", type=float2 },
-            { name="texcoord", type=float2 },
-            { name="color", type=float4 }
-        },
+	vertex
+	{
+		cbuffer GlobalData : register(b0)
+		{
+			float2 translate;
+			float2 scale;
+		};
 
-        output
-        {
-            { name="position", type=float4 },
-            { name="texcoord", type=float2 },
-            { name="color", type=float4 }
-        },
+		VertexOutput main(VertexInput input)
+		{
+			VertexOutput output;
 
-        code 
-        [[ 
-            output.position = float4(input.position * scale + translate, 0.0, 1.0);
-	        output.texcoord = input.texcoord;
-	        output.color = input.color;
-        ]]
-    },
+			output.position = float4(input.position * scale + translate, 0.0, 1.0);
+			output.texcoord = input.texcoord;
+			output.color = input.color;
 
-    stage "fragment"
-    {
-        output
-        {
-            { name="color", type=float4 }
-        },
+			return output;
+		}
+	}
 
-        code 
-        [[ 
-            return input.color * texture.Sample(texture_sampler, input.texcoord);
-        ]]
-    }
+	fragment
+	{
+		Texture2D texture : register(t2);
+		SamplerState texture_sampler : register(s1);
+
+		float4 main(VertexOutput input) : SV_TARGET0
+		{
+			return input.color * texture.Sample(texture_sampler, input.texcoord);
+		}
+	}
 }

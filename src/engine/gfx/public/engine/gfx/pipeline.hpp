@@ -50,9 +50,9 @@ struct PipelineShaderStage
 	BackendDeviceResource shader;
 	const char* entry_point;
 
-	PipelineShaderStage(const ShaderStageFlagBits& in_shader_stage,
-		const BackendDeviceResource& in_shader,
-		const char* in_entry_point) : shader_stage(in_shader_stage),
+	PipelineShaderStage(const ShaderStageFlagBits& in_shader_stage = ShaderStageFlagBits::Vertex,
+		const BackendDeviceResource& in_shader = null_backend_resource,
+		const char* in_entry_point = nullptr) : shader_stage(in_shader_stage),
 		shader(in_shader), entry_point(in_entry_point) {}
 
 	bool operator==(const PipelineShaderStage& in_other) const

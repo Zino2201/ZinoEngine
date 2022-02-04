@@ -116,4 +116,13 @@ inline std::string to_string(const ze::gfx::DeviceResourceType& in_type)
 	}
 }
 
+template<ze::gfx::DeviceResourceType Type>
+struct hash<ze::gfx::detail::DeviceResource<Type>>
+{
+	uint64_t operator()(const ze::gfx::detail::DeviceResource<Type>& in_handle) const noexcept
+	{
+		return std::hash<uint64_t>()(in_handle.get_handle());
+	}
+};
+
 }

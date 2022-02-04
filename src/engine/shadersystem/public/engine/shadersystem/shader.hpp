@@ -18,8 +18,10 @@ using ShaderMap = robin_hood::unordered_map<gfx::ShaderStageFlagBits, gfx::Uniqu
 
 enum class ShaderPermutationState
 {
-	/** May be compiling or has not yet been requested */
+	/** Not available */
 	Unavailable,
+
+	Compiling,
 
 	/** Ready to be used */
 	Available,
@@ -47,6 +49,8 @@ public:
 
 	[[nodiscard]] ShaderPermutationState get_state() const { return state; }
 	[[nodiscard]] gfx::PipelineLayoutHandle get_pipeline_layout() const { return pipeline_layout.get(); }
+	[[nodiscard]] bool is_compiling() const { return state == ShaderPermutationState::Compiling; }
+	[[nodiscard]] bool is_available() const { return state == ShaderPermutationState::Available; }
 private:
 	Shader& shader;
 	ShaderPermutationId id;
@@ -84,6 +88,22 @@ struct ShaderOption
 	}
 };
 
+/*
+ * Utility class to build permutation ids from options
+ */
+class ShaderPermutationBuilder
+{
+public:
+	ShaderPermutationBuilder(Shader& in_shader);
+
+	void add_option(std::string in_name, int32_t value);
+
+	[[nodiscard]] ShaderPermutationId get_id() const { return id; }
+private:
+	Shader& shader;
+	ShaderPermutationId id;
+};
+
 /**
  * A shader that can be instancied later on to a ShaderInstance
  */
@@ -99,7 +119,8 @@ public:
 
 	[[nodiscard]] ShaderManager& get_shader_manager() { return shader_manager; }
 	[[nodiscard]] const auto& get_declaration() const { return declaration; }
-private:
+	[[nodiscard]] const auto& get_options() const { return options; }
+
 	[[nodiscard]] ShaderPermutation* get_permutation(const ShaderPermutationId in_id);
 private:
 	ShaderManager& shader_manager;

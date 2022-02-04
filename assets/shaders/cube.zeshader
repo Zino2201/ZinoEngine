@@ -1,0 +1,51 @@
+shader "Cube"
+{
+	struct VertexInput
+	{
+		float3 position : POSITION;
+		float3 normal : NORMAL;
+	};
+
+	struct VertexOutput
+	{
+		float4 position : SV_POSITION;
+		float3 normal : NORMAL;
+		float3 world_pos : TEXCOORD0;
+	};
+
+	vertex
+	{
+		cbuffer GlobalData : register(b0)
+		{
+			float4x4 world;
+			float4x4 view;
+			float4x4 proj;
+		};
+
+		VertexOutput main(VertexInput input)
+		{
+			VertexOutput output;
+
+			float4x4 WVP = mul(world, mul(view, proj));
+	        output.position = mul(float4(input.position, 1.0), WVP);
+            output.normal = input.normal;
+            output.world_pos = mul(float4(input.position, 1.0), world).xyz;
+
+			return output;
+		}
+	}
+
+	fragment
+	{
+		float4 main(VertexOutput input) : SV_TARGET0
+		{
+			const float3 light_pos = float3(1.5, 0, 0);
+            
+            float3 norm = normalize(input.normal);
+            float3 light_dir = normalize(light_pos - input.world_pos);
+            float diff = max(dot(norm, light_dir), 0.0);
+
+            return float4(input.world_pos, 1.0);
+		}
+	}
+}

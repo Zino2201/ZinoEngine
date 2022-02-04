@@ -49,7 +49,7 @@ if(ZE_WITH_SANITIZERS)
 	target_compile_definitions(core PUBLIC BOOST_USE_ASAN=1)
 endif()
 
-target_compile_definitions(core PUBLIC "$<$<CONFIG:Debug>:ZE_BUILD_PRIVATE_DEFINITION_DEBUG=1>$<$<CONFIG:RelWithDebInfo>:ZE_BUILD_PRIVATE_DEFINITION_RELWITHDEBINFO=1>$<$<CONFIG:Release>:ZE_BUILD_PRIVATE_DEFINITION_RELEASE=1>")
+target_compile_definitions(core PUBLIC "$<$<CONFIG:Debug>:ZE_BUILD_TYPE_DEBUG=1>$<$<CONFIG:RelWithDebInfo>:ZE_BUILD_TYPE_RELWITHDEBINFO=1>$<$<CONFIG:Release>:ZE_BUILD_TYPE_RELEASE=1>")
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
 	target_compile_definitions(core PUBLIC "TBB_USE_DEBUG=1")
 endif()

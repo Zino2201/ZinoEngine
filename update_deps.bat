@@ -20,3 +20,5 @@ vcpkg install boost-dynamic-bitset:x64-windows
 vcpkg install boost-locale:x64-windows
 vcpkg install freetype:x64-windows
 vcpkg install sol2:x64-windows
+vcpkg install spirv-cross:x64-windows
+REM vcpkg install shaderwriter:x64-windows
