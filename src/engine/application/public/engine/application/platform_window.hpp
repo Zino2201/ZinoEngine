@@ -12,6 +12,7 @@ enum class WindowFlagBits
 	Centered = 1 << 0,
 	Maximized = 1 << 1,
 	Borderless = 1 << 2,
+	Resizable = 1 << 3,
 };
 ZE_ENABLE_FLAG_ENUMS(WindowFlagBits, WindowFlags);
 

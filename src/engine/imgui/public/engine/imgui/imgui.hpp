@@ -89,6 +89,7 @@ void new_frame(float in_delta_time, platform::Window& in_main_window);
 void draw_viewport(ImGuiViewport* viewport);
 void swap_buffers(ImGuiViewport* viewport);
 void draw_viewports();
+void update_mouse_cursor();
 void present_viewports();
 void update_monitors();
 void destroy();
@@ -99,5 +100,6 @@ void on_mouse_double_click(platform::Window& in_window, platform::MouseButton in
 void on_mouse_up(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos);
 void on_mouse_wheel(platform::Window& in_window, const float in_delta, const glm::ivec2& in_mouse_pos);
 void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t in_height);
+void on_cursor_set();
 
 }

@@ -37,7 +37,7 @@ public:
 
 	/** Cursor API */
 	std::unique_ptr<Cursor> create_system_cursor(SystemCursor in_cursor) override;
-	void set_cursor(Cursor& in_cursor) override;
+	void set_cursor(Cursor* in_cursor) override;
 	void set_show_cursor(bool in_show) override;
 
 	[[nodiscard]] HINSTANCE get_hinstance() const { return instance; }

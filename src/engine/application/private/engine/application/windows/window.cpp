@@ -19,7 +19,10 @@ WindowsWindow::WindowsWindow(
 	if(in_flags & WindowFlagBits::Borderless)
 		style |= WS_POPUP;
 	else
-		style |= WS_OVERLAPPEDWINDOW;
+		style |= WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+
+	if (in_flags & WindowFlagBits::Resizable)
+		style |= WS_THICKFRAME;
 
 	ex_style |= WS_EX_LAYERED;
 
@@ -142,7 +145,7 @@ void WindowsWindow::show()
 
 LRESULT CALLBACK WindowsWindow::wnd_proc(uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
 {
-	application.wnd_proc(*this, in_msg, in_wparam, in_lparam);
+	const LRESULT def_result = DefWindowProc(hwnd, in_msg, in_wparam, in_lparam);
 
 	switch(in_msg)
 	{
@@ -150,21 +153,18 @@ LRESULT CALLBACK WindowsWindow::wnd_proc(uint32_t in_msg, WPARAM in_wparam, LPAR
 	{
 		width = LOWORD(in_lparam);
 		height = HIWORD(in_lparam);
-		return 0;
+		break;
 	}
 	case WM_MOVE:
 	{
 		position.x = LOWORD(in_lparam);
 		position.y = HIWORD(in_lparam);
-		return 0;
+		break;
 	}
-	case WM_XBUTTONDOWN:
-	case WM_XBUTTONUP:
-	case WM_XBUTTONDBLCLK:
-		return TRUE;
 	}
 
-	return DefWindowProc(hwnd, in_msg, in_wparam, in_lparam);
+	application.wnd_proc(*this, in_msg, in_wparam, in_lparam);
+	return def_result;
 }
 
 }

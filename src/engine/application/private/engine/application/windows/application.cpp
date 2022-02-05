@@ -85,7 +85,7 @@ void WindowsApplication::update_monitors()
 		reinterpret_cast<LPARAM>(this));
 }
 
-void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM)
+void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
 {
 	auto convert_button = [](uint32_t in_msg) -> MouseButton
 	{
@@ -151,6 +151,12 @@ void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPA
 		{
 			message_handler->on_mouse_wheel(in_window, 
 				static_cast<float>(GET_WHEEL_DELTA_WPARAM(in_wparam)) / WHEEL_DELTA, get_mouse_pos());
+			break;
+		}
+		case WM_SETCURSOR:
+		{
+			if (LOWORD(in_lparam) == HTCLIENT)
+				message_handler->on_cursor_set();
 			break;
 		}
 		}
@@ -261,9 +267,12 @@ std::unique_ptr<Cursor> WindowsApplication::create_system_cursor(SystemCursor in
 	return std::make_unique<WindowsCursor>(LoadCursor(nullptr, name));
 }
 
-void WindowsApplication::set_cursor(Cursor& in_cursor)
+void WindowsApplication::set_cursor(Cursor* in_cursor)
 {
-	SetCursor(static_cast<WindowsCursor&>(in_cursor).get_cursor());
+	if (in_cursor)
+		SetCursor(static_cast<WindowsCursor*>(in_cursor)->get_cursor());
+	else
+		SetCursor(nullptr);
 }
 
 void WindowsApplication::set_show_cursor(bool in_show)

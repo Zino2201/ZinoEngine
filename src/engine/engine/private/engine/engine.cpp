@@ -57,7 +57,7 @@ void Engine::run()
 		720,
 		0,
 		0,
-		platform::WindowFlags(platform::WindowFlagBits::Centered | platform::WindowFlagBits::Maximized));
+		platform::WindowFlags(platform::WindowFlagBits::Centered | platform::WindowFlagBits::Maximized | platform::WindowFlagBits::Resizable));
 
 	ImGui::SetCurrentContext(ImGui::CreateContext());
 	imgui::initialize(*shader_manager);
@@ -225,6 +225,9 @@ void Engine::run()
 	render_pass_state.color_blend.attachments = test;
 
 	material_state.rasterizer.cull_mode = gfx::CullMode::Back;
+	render_pass_state.depth_stencil.enable_depth_test = true;
+	render_pass_state.depth_stencil.enable_depth_write = true;
+	render_pass_state.depth_stencil.depth_compare_op = gfx::CompareOp::Less;
 
 	auto previous = std::chrono::high_resolution_clock::now();
 
@@ -290,6 +293,7 @@ void Engine::run()
 			RenderPassInfo render_pass_info;
 			render_pass_info.render_area = Rect2D(0, 0,
 				static_cast<uint32_t>(main_window->get_width()), static_cast<uint32_t>(main_window->get_height()));
+			render_pass_info.depth_stencil_attachment = depth_buffer_view.get();
 			render_pass_info.color_attachments = color_attachments;
 			render_pass_info.clear_attachment_flags = 1 << 0;
 			render_pass_info.store_attachment_flags = 1 << 0;
@@ -299,7 +303,7 @@ void Engine::run()
 			std::array subpasses = { RenderPassInfo::Subpass(color_attachments_refs,
 				{},
 				{},
-				RenderPassInfo::DepthStencilMode::ReadOnly) };
+				RenderPassInfo::DepthStencilMode::ReadWrite) };
 			render_pass_info.subpasses = subpasses;
 
 			device->cmd_begin_render_pass(list, render_pass_info);
@@ -344,6 +348,12 @@ void Engine::create_swapchain(const gfx::UniqueSwapchain& old_swapchain)
 		main_window->get_height(),
 		old_swapchain.is_valid() ? device->get_swapchain_backend_handle(old_swapchain.get()) : gfx::null_backend_resource)).get_value());
 
+	depth_buffer = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_depth_stencil_attachment(
+		main_window->get_width(), main_window->get_height(), gfx::Format::D24UnormS8Uint)).get_value());
+
+	depth_buffer_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_depth(
+		depth_buffer.get(), gfx::Format::D24UnormS8Uint)).get_value());
+
 	if(old_swapchain.is_valid())
 		imgui::update_main_viewport(*main_window, swapchain.get());
 }
@@ -381,5 +391,9 @@ void Engine::on_mouse_double_click(platform::Window& in_window, platform::MouseB
 	imgui::on_mouse_double_click(in_window, in_button, in_mouse_pos);
 }
 
+void Engine::on_cursor_set()
+{
+	imgui::on_cursor_set();
+}
 
 }

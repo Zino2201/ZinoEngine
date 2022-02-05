@@ -42,7 +42,7 @@ public:
 
 	/** Cursor API */
 	[[nodiscard]] virtual std::unique_ptr<Cursor> create_system_cursor(SystemCursor in_cursor) = 0;
-	virtual void set_cursor(Cursor& in_cursor) = 0;
+	virtual void set_cursor(Cursor* in_cursor) = 0;
 	virtual void set_show_cursor(bool in_show) = 0;
 };
 

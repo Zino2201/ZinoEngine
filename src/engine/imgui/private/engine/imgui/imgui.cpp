@@ -20,6 +20,7 @@ std::vector<PipelineShaderStage> shader_stages;
 PipelineRenderPassState render_pass_state;
 PipelineMaterialState material_state;
 std::vector<std::unique_ptr<platform::Cursor>> mouse_cursors;
+ImGuiMouseCursor last_mouse_cursor;
 
 std::array color_blend_states = { PipelineColorBlendAttachmentState(
 	true,
@@ -304,15 +305,10 @@ void new_frame(float in_delta_time, platform::Window& in_main_window)
 	io.DisplaySize = ImVec2(static_cast<float>(in_main_window.get_width()), 
 		static_cast<float>(in_main_window.get_height()));
 
-	ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
-	if(io.MouseDrawCursor || cursor == ImGuiMouseCursor_None)
+	const ImGuiMouseCursor cursor = io.MouseDrawCursor ? ImGuiMouseCursor_None : ImGui::GetMouseCursor();
+	if (last_mouse_cursor != cursor)
 	{
-		platform->get_application().set_show_cursor(false);
-	}
-	else
-	{
-		platform->get_application().set_cursor(mouse_cursors[cursor] ? *mouse_cursors[cursor] : *mouse_cursors[ImGuiMouseCursor_Arrow]);
-		platform->get_application().set_show_cursor(true);
+		update_mouse_cursor();
 	}
 
 	/** Acquire main window image as soon as possible */
@@ -321,6 +317,25 @@ void new_frame(float in_delta_time, platform::Window& in_main_window)
 		renderer_data->has_submitted_work = false;
 		get_device()->acquire_swapchain_texture(renderer_data->window.get_swapchain(),
 			renderer_data->image_available_semaphore.get());
+	}
+}
+
+void update_mouse_cursor()
+{
+	ImGuiIO& io = ImGui::GetIO();
+	const auto platform = get_module<platform::ApplicationModule>("Application");
+
+	const ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
+	last_mouse_cursor = cursor;
+
+	if (io.MouseDrawCursor || cursor == ImGuiMouseCursor_None)
+	{
+		platform->get_application().set_show_cursor(false);
+	}
+	else
+	{
+		platform->get_application().set_show_cursor(true);
+		platform->get_application().set_cursor(mouse_cursors[cursor] ? mouse_cursors[cursor].get() : mouse_cursors[ImGuiMouseCursor_Arrow].get());
 	}
 }
 
@@ -584,6 +599,11 @@ void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t 
 				ImVec2(static_cast<float>(in_width), static_cast<float>(in_height)));
 		}
 	}
+}
+
+void on_cursor_set()
+{
+	update_mouse_cursor();
 }
 
 }

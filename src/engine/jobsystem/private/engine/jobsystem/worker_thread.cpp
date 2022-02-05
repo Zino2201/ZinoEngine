@@ -23,12 +23,20 @@ void WorkerThread::run()
 	current_worker_idx = index;
 	hal::set_thread_name(thread.get_id(), fmt::format("Worker Thread {}", index));
 
+	/** TODO: FIX BUG JOB JAMAIS EXECUTE JEN AI MARRE */
+	constexpr uint32_t cycles_before_sleep = 100000;
+	uint32_t sleep_counter = 0;
+
 	while (active)
 	{
 		if (!flush_one())
 		{
-			std::unique_lock lock(sleep_mutex);
-			global_sleep_var.wait(lock);
+			if (++sleep_counter >= cycles_before_sleep)
+			{
+				sleep_counter = 0;
+				std::unique_lock lock(sleep_mutex);
+				global_sleep_var.wait(lock);
+			}
 		}
 	}
 }

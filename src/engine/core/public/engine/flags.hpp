@@ -18,7 +18,7 @@ public:
 	
     constexpr Flags(const Flags& in_other) noexcept : mask(in_other.mask) {}
     constexpr Flags(Flags&& in_other) noexcept : mask(std::move(in_other.mask)) {}
-    constexpr explicit Flags(const T& in_bit) noexcept : mask(static_cast<MaskType>(in_bit)) {}
+    constexpr Flags(const T& in_bit) noexcept : mask(static_cast<MaskType>(in_bit)) {}
     constexpr explicit Flags(const MaskType& in_mask) noexcept : mask(in_mask) {}
 	
 	/** Bitwise operators */

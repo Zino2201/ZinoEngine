@@ -31,6 +31,7 @@ public:
 	virtual void on_mouse_up(Window& in_window, MouseButton in_button, const glm::ivec2& in_mouse_pos) { UnusedParameters{ in_window, in_button, in_mouse_pos }; }
 	virtual void on_mouse_double_click(Window& in_window, MouseButton in_button, const glm::ivec2& in_mouse_pos) { UnusedParameters{ in_window, in_button, in_mouse_pos }; }
 	virtual void on_mouse_wheel(Window& in_window, const float in_delta, const glm::ivec2& in_mouse_pos) { UnusedParameters{ in_window, in_delta, in_mouse_pos }; }
+	virtual void on_cursor_set() {}
 };
 
 }
