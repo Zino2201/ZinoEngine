@@ -3,8 +3,11 @@
 namespace ze::shadersystem
 {
 
-ShaderPermutationBuilder::ShaderPermutationBuilder(Shader& in_shader)
-	: shader(in_shader) {}
+ShaderPermutationBuilder::ShaderPermutationBuilder(Shader& in_shader, const std::string_view& in_pass)
+	: shader(in_shader)
+{
+	id.pass = in_pass;
+}
 
 void ShaderPermutationBuilder::add_option(std::string in_name, int32_t value)
 {
@@ -14,13 +17,13 @@ void ShaderPermutationBuilder::add_option(std::string in_name, int32_t value)
 		{
 			if(option.type == ShaderOptionType::Bool)
 			{
-				id[option.id_index] = static_cast<bool>(value);
+				id.options[option.id_index] = static_cast<bool>(value);
 			}
 			else
 			{
 				for(size_t i = 0; i < option.bit_width; ++i)
 				{
-					id[option.id_index + i] = value & 1;
+					id.options[option.id_index + i] = value & 1;
 					value >>= 1;
 				}
 			}
@@ -63,11 +66,13 @@ std::unique_ptr<ShaderInstance> Shader::instantiate(ShaderPermutationId in_id)
 
 ShaderPermutation* Shader::get_permutation(const ShaderPermutationId in_id)
 {
+	std::scoped_lock guard(permutations_lock);
 	const auto it = permutations.find(in_id);
 	if (it != permutations.end())
 		return it->second.get();
 
-	auto [new_it, unused] = permutations.insert({in_id, std::make_unique<ShaderPermutation>(*this, in_id)});
+	auto [new_it, succeed] = permutations.insert({in_id, std::make_unique<ShaderPermutation>(*this, in_id)});
+	ZE_CHECK(succeed);
 	return new_it->second.get();
 }
 

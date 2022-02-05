@@ -67,7 +67,7 @@ public:
 		const std::string_view& in_debug_name) : device(in_device),
 		resource(in_resource)
 	{
-#if ZE_BUILD(DEBUG)
+#if ZE_BUILD(IS_DEBUG)
 		debug_name = in_debug_name;
 
 		if(debug_name.empty())
@@ -83,7 +83,7 @@ public:
 
 	virtual ~BackendResourceWrapper()
 	{
-#if ZE_BUILD(DEBUG)
+#if ZE_BUILD(IS_DEBUG)
 		logger::verbose(log_gfx_device, "Destroyed device resource \"{}\"", debug_name);
 #endif
 	}
@@ -92,7 +92,7 @@ public:
 protected:
 	Device& device;
 	BackendDeviceResource resource;
-#if ZE_BUILD(DEBUG)
+#if ZE_BUILD(IS_DEBUG)
 	std::string debug_name;
 #endif
 };

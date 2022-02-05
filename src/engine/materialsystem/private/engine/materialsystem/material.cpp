@@ -4,26 +4,17 @@
 namespace ze::materialsystem
 {
 
-Material::Material(shadersystem::ShaderManager& in_shader_manager,
-	const MaterialDeclaration& in_declaration) : shader_manager(in_shader_manager)
+Material::Material(shadersystem::ShaderManager& in_shader_manager) : shader_manager(in_shader_manager) {}
+
+const MaterialPass* Material::get_pass(const std::string& in_name) const
 {
-	if (shadersystem::Shader* default_shader = shader_manager.get_shader(in_declaration.default_shader.shader))
+	for(const auto& pass : passes)
 	{
-		shadersystem::ShaderPermutationBuilder perm_builder(*default_shader);
-		for (const auto& option : in_declaration.default_shader.options)
-			perm_builder.add_option(option.name, option.value);
-
-		default_shader_instance = default_shader->instantiate(perm_builder.get_id());
+		if (pass->pass == in_name)
+			return pass.get();
 	}
-}
 
-shadersystem::ShaderInstance* Material::get_shader_instance(std::string in_pass) const
-{
-	auto it = passes_shader_instances.find(in_pass);
-	if (it != passes_shader_instances.end())
-		return it->second.get();
-
-	return default_shader_instance.get();
+	return nullptr;
 }
 
 }

@@ -13,14 +13,17 @@ ShaderPermutation::ShaderPermutation(Shader& in_shader, ShaderPermutationId in_i
 
 }
 
+
+
 void ShaderPermutation::compile()
 {
-	auto compile_stage = [&](const ShaderStage& in_stage)
+	auto compile_stage = [](const Shader& shader, const ShaderPermutationId& id, const ShaderStage& in_stage)
 	{
 		gfx::ShaderCompilerInput input;
-		input.name = fmt::format("{} (permutation {}, stage {})",
+		input.name = fmt::format("{} (pass {}, options {}, stage {})",
 			shader.get_declaration().name,
-			id.to_ullong(),
+			id.pass,
+			id.options.to_ullong(),
 			std::to_string(in_stage.stage));
 		input.stage = in_stage.stage;
 		input.target_format = shader.get_shader_manager().get_shader_format();
@@ -41,14 +44,22 @@ void ShaderPermutation::compile()
 		jobsystem::JobGroup group;
 		tbb::concurrent_hash_map<gfx::ShaderStageFlagBits, gfx::ShaderCompilerOutput> outputs;
 
-		for (const auto& stage : shader.get_declaration().stages)
+		for (const auto& pass : shader.get_declaration().passes)
 		{
-			jobsystem::Job* stage_job = new_child_job(
-				[&, stage](jobsystem::Job&)
+			if (pass.name == id.pass)
+			{
+				for (const auto stage : pass.stages)
 				{
-					outputs.insert({ stage.stage, compile_stage(stage) });
-				}, root_compilation_job, jobsystem::JobType::Normal, 0.f);
-			group.add(stage_job);
+					jobsystem::Job* stage_job = new_child_job(
+						[&, stage](jobsystem::Job&)
+						{
+							outputs.insert({ stage.stage, compile_stage(shader, id, stage) });
+						}, root_compilation_job, jobsystem::JobType::Normal, 0.f);
+					group.add(stage_job);
+				}
+
+				break;
+			}
 		}
 
 		group.schedule_and_wait();
@@ -124,7 +135,7 @@ void ShaderPermutation::compile()
 			else
 				logger::fatal(log_shadersystem, "Failed to create pipeline layout for shader {} (permutation: {}): {}",
 					shader.get_declaration().name,
-					id.to_ullong(),
+					id.options.to_ullong(),
 					"error");
 
 			state = ShaderPermutationState::Available;

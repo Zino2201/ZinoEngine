@@ -1,0 +1,41 @@
+shader "MetalPbr"
+{
+	parameters
+	{
+		float x;
+	}
+
+	surface
+	{
+		Surface get_surface()
+		{
+			return {};
+		}
+	}
+
+	pass "forward"
+	{
+		vertex 
+		{
+			
+		}
+
+		fragment
+		{
+
+		}
+	}
+
+	pass "shadow"
+	{
+		vertex 
+		{
+			
+		}
+
+		fragment
+		{
+
+		}
+	}
+}

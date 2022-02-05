@@ -9,7 +9,9 @@ namespace ze::gfx
 
 VulkanBackendModule::VulkanBackendModule()
 {
-	load_module("VulkanShaderCompiler");
+	auto result = load_module("VulkanShaderCompiler");
+	if (!result)
+		logger::fatal(log_vulkan, "Failed to load vulkan shader compiler module! Exiting.");
 }
 
 Result<std::unique_ptr<Backend>, std::string> VulkanBackendModule::create_vulkan_backend(const BackendFlags& in_flags)

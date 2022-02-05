@@ -557,6 +557,11 @@ void on_mouse_down(platform::Window&, platform::MouseButton in_button, const glm
 	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = true;
 }
 
+void on_mouse_double_click(platform::Window&, platform::MouseButton in_button, const glm::ivec2&)
+{
+	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = true;
+}
+
 void on_mouse_up(platform::Window&, platform::MouseButton in_button, const glm::ivec2&)
 {
 	ImGui::GetIO().MouseDown[static_cast<size_t>(in_button)] = false;

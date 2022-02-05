@@ -15,7 +15,7 @@
 /** Assertions */
 
 /** ASSERT/ASSETF */
-#if ZE_BUILD(DEBUG)
+#if ZE_BUILD(IS_DEBUG)
 #define ZE_ASSERT(condition) if(!(condition)) { logger::fatal("Assertion failed: {} (File: {}, Line: {})", #condition, __FILE__, __LINE__); ZE_DEBUGBREAK(); }
 #define ZE_ASSERTF(condition, msg, ...) if(!(condition)) { logger::fatal("Assertion failed: {} (File: {}, Line: {})", fmt::format(fmt::runtime(msg), __VA_ARGS__), __FILE__, __LINE__); ZE_DEBUGBREAK(); }
 #else 
@@ -30,7 +30,7 @@
 #endif
 
 /** CHECK/CHECKF */
-#if ZE_BUILD(DEBUG)
+#if ZE_BUILD(IS_DEBUG)
 #define ZE_CHECK(condition) if(!(condition)) { logger::error("Check failed: {} (File: {}, Line: {})", #condition, __FILE__, __LINE__); ZE_DEBUGBREAK(); }
 #define ZE_CHECKF(condition, msg, ...) if(!(condition)) { logger::error("{} (File: {}, Line: {})", fmt::format(fmt::runtime(msg), __VA_ARGS__), __FILE__, __LINE__); ZE_DEBUGBREAK(); }
 #define ZE_UNREACHABLE() ZE_CHECKF(true, "Reached unreacheable code!"); std::abort(); ZE_BUILTIN_UNREACHABLE()

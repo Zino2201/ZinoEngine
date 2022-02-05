@@ -16,6 +16,7 @@ struct ShaderCompilerInput
 	std::span<uint8_t> code;
 	ShaderFormat target_format;
 	std::string entry_point;
+	std::vector<std::pair<std::string, std::string>> definitions;
 	ShaderStageFlagBits stage;
 
 	ShaderCompilerInput() = default;

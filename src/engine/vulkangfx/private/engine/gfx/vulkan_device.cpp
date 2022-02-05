@@ -1161,16 +1161,16 @@ void VulkanDevice::cmd_bind_vertex_buffers(const BackendDeviceResource& in_list,
 	const std::span<BackendDeviceResource> in_buffers, 
 	const std::span<uint64_t> in_offsets)
 {
-	std::vector<VkBuffer> buffers;
-	buffers.reserve(in_buffers.size());
+	std::vector<VkBuffer> benjas;
+	benjas.reserve(in_buffers.size());
 
 	for(const auto& buffer : in_buffers)
-		buffers.emplace_back(get_resource<VulkanBuffer>(buffer)->get_buffer());
+		benjas.emplace_back(get_resource<VulkanBuffer>(buffer)->get_buffer());
 
 	vkCmdBindVertexBuffers(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
 		in_first_binding,
-		static_cast<uint32_t>(buffers.size()),
-		buffers.data(),
+		static_cast<uint32_t>(benjas.size()),
+		benjas.data(),
 		in_offsets.data());
 }
 

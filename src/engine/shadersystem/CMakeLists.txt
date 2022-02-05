@@ -2,6 +2,7 @@ include(FindLua)
 find_package(Lua REQUIRED)
 find_package(sol2 CONFIG REQUIRED)
 ze_add_module(shadersystem
+	public/engine/shadersystem/shader_permutation_id.hpp
 	public/engine/shadersystem/shader_declaration.hpp
 	public/engine/shadersystem/shader_manager.hpp
 	public/engine/shadersystem/shader.hpp

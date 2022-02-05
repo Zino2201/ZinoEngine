@@ -5,9 +5,9 @@
  * https://www.fluentcpp.com/2019/05/28/better-macros-better-flags/
  */
 
-/** So for some reason MSVC defined is broken.. */
+/** So for some reason MSVC defined() is broken.. */
 #if _MSC_VER >= 1
-#define ZE_DEFINED(X) (X >= 1)
+#define ZE_DEFINED(X) X >= 1
 #else
 #define ZE_DEFINED(X) defined(X)
 #endif
@@ -34,7 +34,7 @@
 #define ZE_COMPILER(X) ZE_COMPILER_PRIVATE_DEFINITION_##X()
 
 /** Build types */
-#define ZE_BUILD_PRIVATE_DEFINITION_DEBUG() ZE_DEFINED(ZE_BUILD_TYPE_DEBUG)
+#define ZE_BUILD_PRIVATE_DEFINITION_IS_DEBUG() ZE_DEFINED(ZE_BUILD_TYPE_DEBUG)
 #define ZE_BUILD(X) ZE_BUILD_PRIVATE_DEFINITION_##X()
 
 /** Compile-time features */

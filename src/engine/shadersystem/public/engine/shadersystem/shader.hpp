@@ -3,6 +3,7 @@
 #include "shader_declaration.hpp"
 #include <bitset>
 #include "engine/jobsystem/job.hpp"
+#include "shader_permutation_id.hpp"
 
 namespace ze::shadersystem
 {
@@ -11,9 +12,6 @@ class Shader;
 class ShaderInstance;
 class ShaderManager;
 
-static constexpr size_t permutation_bit_count = 32;
-
-using ShaderPermutationId = std::bitset<permutation_bit_count>;
 using ShaderMap = robin_hood::unordered_map<gfx::ShaderStageFlagBits, gfx::UniqueShader>;
 
 enum class ShaderPermutationState
@@ -37,6 +35,10 @@ public:
 
 	ShaderPermutation(const ShaderPermutation&) = delete;
 	ShaderPermutation& operator=(const ShaderPermutation&) = delete;
+
+	/** Don't allow move as this may invalidate some this ptrs in lambdas for compiling */
+	ShaderPermutation(ShaderPermutation&&) = delete;
+	ShaderPermutation& operator=(ShaderPermutation&&) = delete;
 
 	void compile();
 
@@ -94,7 +96,7 @@ struct ShaderOption
 class ShaderPermutationBuilder
 {
 public:
-	ShaderPermutationBuilder(Shader& in_shader);
+	ShaderPermutationBuilder(Shader& in_shader, const std::string_view& in_pass = "");
 
 	void add_option(std::string in_name, int32_t value);
 
@@ -118,6 +120,7 @@ public:
 	[[nodiscard]] std::unique_ptr<ShaderInstance> instantiate(ShaderPermutationId in_id);
 
 	[[nodiscard]] ShaderManager& get_shader_manager() { return shader_manager; }
+	[[nodiscard]] const ShaderManager& get_shader_manager() const { return shader_manager; }
 	[[nodiscard]] const auto& get_declaration() const { return declaration; }
 	[[nodiscard]] const auto& get_options() const { return options; }
 
@@ -129,6 +132,7 @@ private:
 	std::vector<ShaderOption> options;
 	robin_hood::unordered_map<std::string, size_t> name_to_option_idx;
 	robin_hood::unordered_map<ShaderPermutationId, std::unique_ptr<ShaderPermutation>> permutations;
+	std::mutex permutations_lock;
 };
 
 /**

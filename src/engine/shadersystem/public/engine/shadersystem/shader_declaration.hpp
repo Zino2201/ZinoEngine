@@ -86,13 +86,20 @@ struct ShaderStage
 	ShaderStage(const gfx::ShaderStageFlagBits in_stage) : stage(in_stage) {}
 };
 
+struct ShaderPass
+{
+	std::string name;
+	std::string common_hlsl;
+	std::vector<ShaderStage> stages;
+};
+
 struct ShaderDeclaration
 {
 	std::string name;
 	gfx::PipelineDepthStencilStateCreateInfo depth_stencil_state;
 	gfx::PipelineRasterizationStateCreateInfo rasterization_state;
 	std::string common_hlsl;
-	std::vector<ShaderStage> stages;
+	std::vector<ShaderPass> passes;
 };
 
 }

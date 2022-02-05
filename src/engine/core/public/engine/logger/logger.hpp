@@ -67,7 +67,7 @@ void logf(SeverityFlagBits in_severity, const Category& in_category,
 template<typename... Args>
 void verbose(const Category& in_category, const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
-#if ZE_BUILD(DEBUG)
+#if ZE_BUILD(IS_DEBUG)
 	logf(SeverityFlagBits::Verbose, in_category, in_format, std::forward<Args>(in_args)...);
 #else
 	UnusedParameters { in_category, in_format, in_args... };

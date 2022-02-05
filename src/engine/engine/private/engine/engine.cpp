@@ -19,7 +19,7 @@ namespace ze
 
 Engine::Engine() : running(true)
 {
-#if ZE_BUILD(DEBUG)
+#if ZE_BUILD(IS_DEBUG)
 	auto result = get_module<gfx::VulkanBackendModule>("vulkangfx")
 		->create_vulkan_backend(gfx::BackendFlags(gfx::BackendFlagBits::DebugLayers));
 #else
@@ -138,8 +138,7 @@ void Engine::run()
 	create_swapchain(gfx::UniqueSwapchain());
 
 	imgui::initialize_main_viewport(*main_window, swapchain.get());
-
-
+	
 	struct vertexdata
 	{
 		glm::vec3 position;
@@ -160,7 +159,7 @@ void Engine::run()
 	{
 		tinyobj::attrib_t attrib;
 		std::vector<tinyobj::shape_t> shapes;
-		tinyobj::LoadObj(&attrib, &shapes, nullptr, nullptr, nullptr, "assets/cube.obj");
+		tinyobj::LoadObj(&attrib, &shapes, nullptr, nullptr, nullptr, "assets/SM_ModelZShader.obj");
 
 
 		for(const auto& shape : shapes)
@@ -191,15 +190,19 @@ void Engine::run()
 	std::vector<gfx::PipelineShaderStage> shader_stages;
 
 	/** Get shaders */
-	{
-		shader_instance = shader_manager->get_shader("Cube")->instantiate({});
+	auto request_new_shader = [&](const char* pass) {
+		shader_instance = shader_manager->get_shader("Cube")->instantiate({ pass });
 		const auto& shader_map = shader_instance->get_permutation().get_shader_map();
 		ZE_ASSERTF(shader_map.size() == 2, "Failed to create ImGui shaders, see log. Exiting.");
 		auto vertex_shader = shader_map.find(gfx::ShaderStageFlagBits::Vertex);
 		auto fragment_shader = shader_map.find(gfx::ShaderStageFlagBits::Fragment);
+		shader_stages.clear();
 		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Vertex, gfx::Device::get_backend_shader(*vertex_shader->second), "main");
 		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Fragment, gfx::Device::get_backend_shader(*fragment_shader->second), "main");
-	}
+	};
+
+	request_new_shader("coucou");
+	request_new_shader("");
 
 	/** Setup material state */
 	material_state.vertex_input.input_binding_descriptions =
@@ -267,13 +270,18 @@ void Engine::run()
 		ImGui::Text("%.0f FPS", 1.f / ImGui::GetIO().DeltaTime, ImGui::GetIO().DeltaTime);
 		ImGui::Text("%.2f ms", ImGui::GetIO().DeltaTime * 1000);
 		ImGui::Text("Mouse Pos: %f %f", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
+		static bool coucou_pass = false;
+		if(ImGui::Checkbox("Coucou pass?", &coucou_pass))
+		{
+			request_new_shader(coucou_pass ? "coucou" : "");
+		}
 		ImGui::ShowDemoWindow();
 		ImGui::Render();
 
 		ImGui::UpdatePlatformWindows();
 		imgui::draw_viewports();
 
-		if(false) {
+		if(true) {
 			using namespace gfx;
 			const auto list = device->allocate_cmd_list(gfx::QueueType::Gfx);
 			std::array clear_values = { ClearValue(ClearColorValue({0, 0, 0, 1})),
@@ -367,5 +375,11 @@ void Engine::on_mouse_wheel(platform::Window& in_window, const float in_delta, c
 {
 	imgui::on_mouse_wheel(in_window, in_delta, in_mouse_pos);
 }
+
+void Engine::on_mouse_double_click(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos)
+{
+	imgui::on_mouse_double_click(in_window, in_button, in_mouse_pos);
+}
+
 
 }

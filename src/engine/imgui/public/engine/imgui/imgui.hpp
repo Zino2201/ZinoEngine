@@ -95,6 +95,7 @@ void destroy();
 
 /** Events, mirrored from platform::ApplicationMessageHandler */
 void on_mouse_down(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos);
+void on_mouse_double_click(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos);
 void on_mouse_up(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos);
 void on_mouse_wheel(platform::Window& in_window, const float in_delta, const glm::ivec2& in_mouse_pos);
 void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t in_height);

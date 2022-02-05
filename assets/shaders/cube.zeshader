@@ -13,15 +13,42 @@ shader "Cube"
 		float3 world_pos : TEXCOORD0;
 	};
 
+	cbuffer GlobalData : register(b0)
+	{
+		float4x4 world;
+		float4x4 view;
+		float4x4 proj;
+	};
+
+	pass "coucou"
+	{
+		vertex
+		{
+		
+			VertexOutput main(VertexInput input)
+			{
+				VertexOutput output;
+
+				float4x4 WVP = mul(world, mul(view, proj));
+				output.position = mul(float4(input.position, 1.0), WVP);
+				output.normal = input.normal;
+				output.world_pos = mul(float4(input.position, 1.0), world).xyz;
+
+				return output;
+			}
+		}
+
+		fragment
+		{
+			float4 main(VertexOutput input) : SV_TARGET0
+			{
+				return float4(0, 0, input.world_pos.x, 1);
+			}
+		}
+	}
+
 	vertex
 	{
-		cbuffer GlobalData : register(b0)
-		{
-			float4x4 world;
-			float4x4 view;
-			float4x4 proj;
-		};
-
 		VertexOutput main(VertexInput input)
 		{
 			VertexOutput output;
