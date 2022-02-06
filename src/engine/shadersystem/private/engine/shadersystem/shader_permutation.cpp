@@ -102,6 +102,7 @@ void ShaderPermutation::compile()
 					switch(resource.type)
 					{
 					case gfx::ShaderReflectionResourceType::Texture2D:
+					case gfx::ShaderReflectionResourceType::TextureCube:
 						type = gfx::DescriptorType::SampledTexture;
 						break;
 					case gfx::ShaderReflectionResourceType::Sampler:

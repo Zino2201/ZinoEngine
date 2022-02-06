@@ -34,7 +34,10 @@ public:
 		uint32_t in_x,
 		uint32_t in_y,
 		const WindowFlags& in_flags = WindowFlags()) = 0;
+	virtual void set_mouse_pos(const glm::ivec2& in_pos) = 0;
 	[[nodiscard]] virtual glm::ivec2 get_mouse_pos() const = 0;
+	[[nodiscard]] virtual void set_capture(const Window& in_window) = 0;
+	[[nodiscard]] virtual void release_capture() = 0;
 
 	/** Monitor API */
 	[[nodiscard]] virtual size_t get_num_monitors() const = 0;
@@ -44,6 +47,8 @@ public:
 	[[nodiscard]] virtual std::unique_ptr<Cursor> create_system_cursor(SystemCursor in_cursor) = 0;
 	virtual void set_cursor(Cursor* in_cursor) = 0;
 	virtual void set_show_cursor(bool in_show) = 0;
+	virtual void lock_cursor(Window* in_window) = 0;
+	virtual void unlock_cursor() = 0;
 };
 
 }

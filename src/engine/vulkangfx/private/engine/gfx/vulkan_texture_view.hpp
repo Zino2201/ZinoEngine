@@ -36,6 +36,8 @@ inline VkImageViewType convert_view_type(const TextureViewType& in_view_type)
 		return VK_IMAGE_VIEW_TYPE_2D;
 	case TextureViewType::Tex3D:
 		return VK_IMAGE_VIEW_TYPE_3D;
+	case TextureViewType::TexCube:
+		return VK_IMAGE_VIEW_TYPE_CUBE;
 	}
 }
 

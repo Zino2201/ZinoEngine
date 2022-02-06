@@ -62,6 +62,8 @@ inline VkImageLayout convert_texture_layout(const TextureLayout& in_layout)
 	default:
 	case TextureLayout::Undefined:
 		return VK_IMAGE_LAYOUT_UNDEFINED;
+	case TextureLayout::General:
+		return VK_IMAGE_LAYOUT_GENERAL;
 	case TextureLayout::ColorAttachment:
 		return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	case TextureLayout::DepthStencilAttachment:

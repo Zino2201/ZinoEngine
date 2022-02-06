@@ -74,9 +74,11 @@ public:
 		{
 			L"-Qstrip_debug",
 			L"-Qstrip_reflect", 
+			L"-Qstrip_rootsignature", 
 			L"-spirv",
 			L"-WX", 
-			L"-Zpr", 
+			L"-Zpr",
+			L"-Oconfig=--loop-unroll",
 		};
 
 		/** Keep transient strings alive */
@@ -151,9 +153,21 @@ public:
 
 			for (const auto& tex : resources.separate_images)
 			{
-				ZE_CHECKF(spv_compiler.get_type(tex.base_type_id).image.dim == spv::Dim2D, "Tex2D only");
+				ShaderReflectionResourceType type = ShaderReflectionResourceType::Texture2D;
+				switch(spv_compiler.get_type(tex.base_type_id).image.dim)
+				{
+				case spv::Dim2D:
+					type = ShaderReflectionResourceType::Texture2D;
+					break;
+				case spv::DimCube:
+					type = ShaderReflectionResourceType::TextureCube;
+					break;
+				default:
+					ZE_CHECK("unsupported dim");
+				}
+
 				output.reflection_data.resources.push_back({ spv_compiler.get_name(tex.id),
-					ShaderReflectionResourceType::Texture2D,
+					type,
 					spv_compiler.get_decoration(tex.id, spv::DecorationDescriptorSet),
 					spv_compiler.get_decoration(tex.id, spv::DecorationBinding),
 					1 });

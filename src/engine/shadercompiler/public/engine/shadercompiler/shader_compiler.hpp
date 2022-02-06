@@ -26,6 +26,7 @@ enum class ShaderReflectionResourceType
 {
 	UniformBuffer,
 	Texture2D,
+	TextureCube,
 	Sampler,
 };
 

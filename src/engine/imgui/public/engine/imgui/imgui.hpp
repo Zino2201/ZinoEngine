@@ -101,5 +101,7 @@ void on_mouse_up(platform::Window& in_window, platform::MouseButton in_button, c
 void on_mouse_wheel(platform::Window& in_window, const float in_delta, const glm::ivec2& in_mouse_pos);
 void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t in_height);
 void on_cursor_set();
+void on_key_down(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat);
+void on_key_up(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat);
 
 }

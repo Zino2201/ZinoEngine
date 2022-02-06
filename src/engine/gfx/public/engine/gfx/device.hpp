@@ -114,14 +114,16 @@ public:
 		const bool in_is_swapchain_texture,
 		const BackendDeviceResource& in_texture,
 		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_texture, in_debug_name),
-		create_info(in_create_info), is_swapchain_texture(in_is_swapchain_texture) {}
+		create_info(in_create_info), is_swapchain_texture(in_is_swapchain_texture), has_optimal_layout(true) {}
 	~Texture();
 
 	[[nodiscard]] const TextureCreateInfo& get_create_info() { return create_info; }
 	[[nodiscard]] bool is_texture_from_swapchain() const { return is_swapchain_texture; }
+	[[nodiscard]] TextureLayout get_layout(TextureLayout in_optimal_layout) const { return has_optimal_layout ? in_optimal_layout : TextureLayout::General; }
 private:
 	TextureCreateInfo create_info;
 	bool is_swapchain_texture;
+	bool has_optimal_layout;
 };
 
 class TextureView : public BackendResourceWrapper<DeviceResourceType::TextureView>
@@ -203,6 +205,7 @@ public:
 		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_list, in_debug_name),
 		type(in_type), render_pass(null_backend_resource), pipeline_state_dirty(false), is_compute_shader(false), dirty_sets_mask(0) {}
 
+	void reset();
 	void prepare_draw();
 	void prepare_compute();
 	void set_render_pass(const BackendDeviceResource& in_handle) { render_pass = in_handle; }
@@ -413,6 +416,24 @@ struct TextureInfo : public DeviceResourceInfo<TextureInfo>
 			in_usage_flags), in_initial_data);
 	}
 
+	static TextureInfo make_immutable_cube(const uint32_t in_width,
+		const uint32_t in_height,
+		const Format in_format, const uint32_t in_mip_levels = 1,
+		const TextureUsageFlags in_usage_flags = TextureUsageFlags(TextureUsageFlagBits::Sampled | gfx::TextureUsageFlagBits::Cube),
+		const std::span<uint8_t>& in_initial_data = {})
+	{
+		return TextureInfo(TextureCreateInfo(TextureType::Tex2D,
+			MemoryUsage::GpuOnly,
+			in_format,
+			in_width,
+			in_height,
+			1,
+			in_mip_levels,
+			6,
+			SampleCountFlagBits::Count1,
+			in_usage_flags | gfx::TextureUsageFlagBits::Cube), in_initial_data );
+	}
+
 	static TextureInfo make_depth_stencil_attachment(const uint32_t in_width, 
 		const uint32_t in_height,
 		const Format in_format,
@@ -455,6 +476,21 @@ struct TextureViewInfo : public DeviceResourceInfo<TextureViewInfo>
 			1))
 	{
 		return TextureViewInfo(TextureViewType::Tex2D,
+			in_handle,
+			in_format,
+			in_subresource_range);
+	}
+
+	static TextureViewInfo make_cube(const TextureHandle& in_handle,
+		const Format in_format,
+		const TextureSubresourceRange& in_subresource_range = TextureSubresourceRange(
+			TextureAspectFlags(TextureAspectFlagBits::Color),
+			0, 
+			1,
+			0,
+			6))
+	{
+		return TextureViewInfo(TextureViewType::TexCube,
 			in_handle,
 			in_format,
 			in_subresource_range);

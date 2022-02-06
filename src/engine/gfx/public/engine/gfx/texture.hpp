@@ -29,11 +29,13 @@ enum class TextureViewType
 	Tex1D,
 	Tex2D,
 	Tex3D,
+	TexCube,
 };
 
 enum class TextureLayout
 {
 	Undefined,
+	General,
 	ColorAttachment,
 	DepthStencilAttachment,
 	DepthReadOnly,
@@ -50,6 +52,7 @@ enum class TextureUsageFlagBits
 	Sampled = 1 << 2,
 	TransferSrc = 1 << 3,
 	TransferDst = 1 << 4,
+	Cube = 1 << 5
 };
 ZE_ENABLE_FLAG_ENUMS(TextureUsageFlagBits, TextureUsageFlags);
 	

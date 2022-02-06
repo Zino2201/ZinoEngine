@@ -111,6 +111,13 @@ Sampler::~Sampler()
 
 /** Command List */
 
+void CommandList::reset()
+{
+	for (auto& set : descriptors)
+		for (auto& descriptor : set)
+			descriptor = Descriptor();
+}
+
 void CommandList::prepare_draw()
 {
 	if(pipeline_state_dirty)
@@ -473,7 +480,7 @@ Result<TextureHandle, GfxResult> Device::create_texture(TextureInfo in_create_in
 				TextureSubresourceLayers(format_to_aspect_flags(texture->get_create_info().format),
 				0,
 				0,
-				1),
+				in_create_info.info.array_layers),
 				Offset3D(),
 				Extent3D(texture->get_create_info().width, 
 				texture->get_create_info().height,
@@ -658,6 +665,7 @@ CommandListHandle Device::allocate_cmd_list(const QueueType& in_type)
 	}
 
 	ZE_CHECK(list);
+	cast_handle<CommandList>(list)->reset();
 	backend_device->begin_cmd_list(cast_handle<CommandList>(list)->get_resource());
 	return list;
 }
@@ -712,14 +720,24 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 			TextureLayout::Undefined,
 			TextureLayout::ColorAttachment);
 
-		if(in_info.clear_attachment_flags & (1 << i))
+		if (in_info.clear_attachment_flags & (1 << i))
 			desc.load_op = AttachmentLoadOp::Clear;
-		
-		if(in_info.load_attachment_flags & (1 << i))
+
+		if (in_info.load_attachment_flags & (1 << i))
 			desc.load_op = AttachmentLoadOp::Load;
 
-		if(in_info.store_attachment_flags & (1 << i))
+		if (in_info.store_attachment_flags & (1 << i))
 			desc.store_op = AttachmentStoreOp::Store;
+
+		if(view->get_texture().is_texture_from_swapchain())
+		{
+			if (desc.load_op == AttachmentLoadOp::Load)
+				desc.initial_layout = TextureLayout::Present;
+		}
+		else
+		{
+			desc.initial_layout = view->get_texture().get_layout(TextureLayout::ColorAttachment);
+		}
 
 		if(view->get_texture().is_texture_from_swapchain())
 			desc.final_layout = TextureLayout::Present;

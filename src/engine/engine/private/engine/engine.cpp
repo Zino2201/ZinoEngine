@@ -13,6 +13,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "engine/tinyobjloader.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 
 namespace ze
 {
@@ -142,6 +144,7 @@ void Engine::run()
 	struct vertexdata
 	{
 		glm::vec3 position;
+		glm::vec2 texcoord;
 		glm::vec3 normal;
 	};
 
@@ -150,11 +153,19 @@ void Engine::run()
 		glm::mat4 world;
 		glm::mat4 view;
 		glm::mat4 proj;
+		float time;
+		glm::vec3 sun_dir;
+		glm::vec3 cam_pos;
+		float _pad01;
+		glm::vec3 view_dir;
 	};
 	gfx::UniformBuffer<ubodata> wvp_ubo;
+	gfx::UniformBuffer<ubodata> sky_wvp;
 	gfx::UniqueBuffer vbo;
+	gfx::UniqueBuffer sky_vbo;
 
 	std::vector<vertexdata> positions;
+	std::vector<vertexdata> sky_positions;
 
 	{
 		tinyobj::attrib_t attrib;
@@ -171,6 +182,9 @@ void Engine::run()
 				pos.position.y = attrib.vertices[3 * index.vertex_index + 1];
 				pos.position.z = attrib.vertices[3 * index.vertex_index + 2];
 
+				pos.texcoord.x = attrib.texcoords[2 * index.texcoord_index + 0];
+				pos.texcoord.y = attrib.texcoords[2 * index.texcoord_index + 1];
+
 				pos.normal.x = attrib.normals[3 * index.normal_index + 0];
 				pos.normal.y = attrib.normals[3 * index.normal_index + 1];
 				pos.normal.z = attrib.normals[3 * index.normal_index + 2];
@@ -184,24 +198,64 @@ void Engine::run()
 			{ (uint8_t*) positions.data(), positions.size() * sizeof(vertexdata) })).get_value());
 	}
 
+	{
+		tinyobj::attrib_t attrib;
+		std::vector<tinyobj::shape_t> shapes;
+		tinyobj::LoadObj(&attrib, &shapes, nullptr, nullptr, nullptr, "assets/sky.obj");
+
+
+		for (const auto& shape : shapes)
+		{
+			for (const auto& index : shape.mesh.indices)
+			{
+				auto& pos = sky_positions.emplace_back();
+				pos.position.x = attrib.vertices[3 * index.vertex_index + 0];
+				pos.position.y = attrib.vertices[3 * index.vertex_index + 1];
+				pos.position.z = attrib.vertices[3 * index.vertex_index + 2];
+
+				pos.texcoord.x = attrib.texcoords[2 * index.texcoord_index + 0];
+				pos.texcoord.y = attrib.texcoords[2 * index.texcoord_index + 1];
+
+				pos.normal.x = attrib.normals[3 * index.normal_index + 0];
+				pos.normal.y = attrib.normals[3 * index.normal_index + 1];
+				pos.normal.z = attrib.normals[3 * index.normal_index + 2];
+			}
+		}
+
+		sky_vbo = gfx::UniqueBuffer(device->create_buffer(gfx::BufferInfo(
+			gfx::BufferCreateInfo(sky_positions.size() * sizeof(vertexdata),
+				gfx::MemoryUsage::GpuOnly,
+				gfx::BufferUsageFlags(gfx::BufferUsageFlagBits::VertexBuffer)),
+			{ (uint8_t*)sky_positions.data(), sky_positions.size() * sizeof(vertexdata) })).get_value());
+	}
+
 	std::unique_ptr<shadersystem::ShaderInstance> shader_instance;
+	std::unique_ptr<shadersystem::ShaderInstance> sky_shader;
 	gfx::PipelineMaterialState material_state;
 	gfx::PipelineRenderPassState render_pass_state;
 	std::vector<gfx::PipelineShaderStage> shader_stages;
+	std::vector<gfx::PipelineShaderStage> sky_shader_stages;
 
 	/** Get shaders */
 	auto request_new_shader = [&](const char* pass) {
 		shader_instance = shader_manager->get_shader("Cube")->instantiate({ pass });
+		sky_shader = shader_manager->get_shader("Sky")->instantiate({ });
 		const auto& shader_map = shader_instance->get_permutation().get_shader_map();
-		ZE_ASSERTF(shader_map.size() == 2, "Failed to create ImGui shaders, see log. Exiting.");
+		const auto& sky_shader_map = sky_shader->get_permutation().get_shader_map();
+		ZE_ASSERTF(shader_map.size() == 2, "Failed to create Cube shaders, see log. Exiting.");
+		ZE_ASSERTF(sky_shader_map.size() == 2, "Failed to create Sky shaders, see log. Exiting.");
 		auto vertex_shader = shader_map.find(gfx::ShaderStageFlagBits::Vertex);
+		auto sky_vertex_shader = sky_shader_map.find(gfx::ShaderStageFlagBits::Vertex);
 		auto fragment_shader = shader_map.find(gfx::ShaderStageFlagBits::Fragment);
+		auto sky_fragment_shader = sky_shader_map.find(gfx::ShaderStageFlagBits::Fragment);
 		shader_stages.clear();
+		sky_shader_stages.clear();
 		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Vertex, gfx::Device::get_backend_shader(*vertex_shader->second), "main");
 		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Fragment, gfx::Device::get_backend_shader(*fragment_shader->second), "main");
+		sky_shader_stages.emplace_back(gfx::ShaderStageFlagBits::Vertex, gfx::Device::get_backend_shader(*sky_vertex_shader->second), "main");
+		sky_shader_stages.emplace_back(gfx::ShaderStageFlagBits::Fragment, gfx::Device::get_backend_shader(*sky_fragment_shader->second), "main");
 	};
 
-	request_new_shader("coucou");
 	request_new_shader("");
 
 	/** Setup material state */
@@ -217,72 +271,217 @@ void Engine::run()
 			gfx::Format::R32G32B32Sfloat,
 			0),
 		gfx::VertexInputAttributeDescription(1, 0,
+			gfx::Format::R32G32Sfloat,
+			offsetof(vertexdata, texcoord)),
+		gfx::VertexInputAttributeDescription(2, 0,
 			gfx::Format::R32G32B32Sfloat,
 			offsetof(vertexdata, normal)),
 	};
 	material_state.stages = shader_stages;
+
 	std::array test = { gfx::PipelineColorBlendAttachmentState() };
 	render_pass_state.color_blend.attachments = test;
 
-	material_state.rasterizer.cull_mode = gfx::CullMode::Back;
+	material_state.rasterizer.cull_mode = gfx::CullMode::None;
 	render_pass_state.depth_stencil.enable_depth_test = true;
 	render_pass_state.depth_stencil.enable_depth_write = true;
 	render_pass_state.depth_stencil.depth_compare_op = gfx::CompareOp::Less;
 
+	gfx::PipelineMaterialState sky_material_state = material_state;
+	sky_material_state.stages = sky_shader_stages;
+
 	auto previous = std::chrono::high_resolution_clock::now();
 
+	int beebo_width = 0, beebo_height = 0;
+	stbi_uc* data = stbi_load("assets/SKY.jpg", &beebo_width, &beebo_height, nullptr, 4);
+	auto beebo = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
+		beebo_width,
+		beebo_height,
+		gfx::Format::R8G8B8A8Unorm,
+		1,
+		gfx::TextureUsageFlagBits::Sampled,
+		{ data, data + beebo_width * beebo_height * 4 })).get_value());
+
+	auto beebo_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
+		beebo.get(),
+		gfx::Format::R8G8B8A8Unorm)).get_value());
+
+	auto beebo_sampler = gfx::UniqueSampler(device->create_sampler(gfx::SamplerInfo()).get_value());
+
+	stbi_image_free(data);
+
+	int noise_width = 0, noise_height = 0;
+	stbi_uc* noise_data = stbi_load("assets/noise.png", &noise_width, &noise_height, nullptr, 4);
+	auto noise = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
+		noise_width,
+		noise_height,
+		gfx::Format::R8G8B8A8Unorm,
+		1,
+		gfx::TextureUsageFlagBits::Sampled,
+		{ noise_data, noise_data + noise_width * noise_height * 4 })).get_value());
+
+	auto noise_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
+		noise.get(),
+		gfx::Format::R8G8B8A8Unorm)).get_value());
+
+	stbi_image_free(noise_data);
+
+	int sky_tex_width = 0, sky_tex_height = 0;
+	stbi_uc* sky_tex_front = stbi_load("assets/sky/front.jpg", &sky_tex_width, &sky_tex_height, nullptr, 4);
+	stbi_uc* sky_tex_back = stbi_load("assets/sky/back.jpg", &sky_tex_width, &sky_tex_height, nullptr, 4);
+	stbi_uc* sky_tex_up = stbi_load("assets/sky/top.jpg", &sky_tex_width, &sky_tex_height, nullptr, 4);
+	stbi_uc* sky_tex_down = stbi_load("assets/sky/bottom.jpg", &sky_tex_width, &sky_tex_height, nullptr, 4);
+	stbi_uc* sky_tex_left = stbi_load("assets/sky/left.jpg", &sky_tex_width, &sky_tex_height, nullptr, 4);
+	stbi_uc* sky_tex_right= stbi_load("assets/sky/right.jpg", &sky_tex_width, &sky_tex_height, nullptr, 4);
+
+	std::vector<uint8_t> sky_global_data;
+	sky_global_data.insert(sky_global_data.end(), sky_tex_right, sky_tex_right + (sky_tex_width * sky_tex_height * 4));
+	sky_global_data.insert(sky_global_data.end(), sky_tex_left, sky_tex_left + (sky_tex_width * sky_tex_height * 4));
+	sky_global_data.insert(sky_global_data.end(), sky_tex_up, sky_tex_up + (sky_tex_width * sky_tex_height * 4));
+	sky_global_data.insert(sky_global_data.end(), sky_tex_down, sky_tex_down + (sky_tex_width * sky_tex_height * 4));
+	sky_global_data.insert(sky_global_data.end(), sky_tex_front, sky_tex_front + (sky_tex_width * sky_tex_height * 4));
+	sky_global_data.insert(sky_global_data.end(), sky_tex_back, sky_tex_back + (sky_tex_width * sky_tex_height * 4));
+
+	auto sky_tex_noise = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_cube(
+		sky_tex_width,
+		sky_tex_height,
+		gfx::Format::R8G8B8A8Unorm,
+		1,
+		gfx::TextureUsageFlagBits::Sampled,
+		{ sky_global_data.data(), sky_global_data.data() + sky_global_data.size()})).get_value());
+
+	auto sky_tex_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_cube(
+		sky_tex_noise.get(),
+		gfx::Format::R8G8B8A8Unorm)).get_value());
+
 	float i = 0;
+	float time = 0.f;
+	float scale = 1.f;
+	glm::vec3 rot = glm::vec3(0.f);
+	glm::vec3 cam_pos = { 2, 0,  0 };
+	glm::vec3 fwd = { 1, 0, 0 };
+	glm::vec3 right = { 0, -1, 0 };
+	float cam_yaw = 0.f, cam_pitch = 0.f;
+
+	platform->get_application().set_show_cursor(false);
+	platform->get_application().lock_cursor(main_window.get());
+	bool locked = true;
+
 	while(running)
 	{
 		i += 0.05f;
+
+		mouse_delta = {};
 		platform->get_application().pump_messages();
 
+		if (locked)
+		{
+			platform->get_application().set_mouse_pos(
+				{ (main_window->get_position().x + main_window->get_width()) / 2,
+				 (main_window->get_position().y + main_window->get_height()) / 2 });
+		}
+
 		device->new_frame();
+
+		if(ImGui::IsKeyPressed(ImGuiKey_Escape, false) && locked && !ImGui::GetIO().WantCaptureKeyboard)
+		{
+			platform->get_application().set_show_cursor(true);
+			platform->get_application().unlock_cursor();
+			locked = false;
+		}
+
+		if(ImGui::IsMouseDown(ImGuiMouseButton_Left) && !locked && !ImGui::GetIO().WantCaptureMouse)
+		{
+			platform->get_application().set_show_cursor(false);
+			platform->get_application().lock_cursor(main_window.get());
+			locked = true;
+		}
 
 		auto current = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double, std::milli> delta_time_ms = current - previous;
 		previous = current;
 
-		glm::vec3 cam_pos = { 2, 0, 0 };
-		glm::vec3 fwd = { 1, 0, 0 };
+		const float delta_time = static_cast<float>(delta_time_ms.count()) * 0.001f;
+
+		imgui::new_frame(delta_time, *main_window);
+
+		if(locked)
+		{
+			cam_yaw += -mouse_delta.x * 5 * delta_time;
+			cam_pitch -= -mouse_delta.y * 5 * delta_time;
+
+			if (cam_pitch > 89.f)
+				cam_pitch = 89.f;
+
+			if (cam_pitch < -89.f)
+				cam_pitch = -89.f;
+		}
+
+		fwd.x = glm::cos(glm::radians(cam_yaw)) * glm::cos(glm::radians(cam_pitch));
+		fwd.y = glm::sin(glm::radians(cam_yaw)) * glm::cos(glm::radians(cam_pitch));
+		fwd.z = glm::sin(glm::radians(cam_pitch));
+		fwd = glm::normalize(fwd);
+
+		right = glm::normalize(glm::cross(fwd, glm::vec3(0, 0, 1)));
+
+		float cam_speed = 10.5f;
+		if (locked)
+		{
+			if (ImGui::IsKeyDown(ImGuiKey_Z))
+				cam_pos -= fwd * cam_speed * delta_time;
+			if (ImGui::IsKeyDown(ImGuiKey_S))
+				cam_pos += fwd * cam_speed * delta_time;
+			if (ImGui::IsKeyDown(ImGuiKey_Q))
+				cam_pos += right * cam_speed * delta_time;
+			if (ImGui::IsKeyDown(ImGuiKey_D))
+				cam_pos -= right * cam_speed * delta_time;
+		}
 
 		glm::mat4 view = glm::lookAtLH(cam_pos,
 			cam_pos + fwd,
 			glm::vec3(0, 0, 1.f));
 
-		glm::mat4 model = glm::scale(glm::mat4(1.f), glm::vec3(0.5f)) *
-			glm::rotate(glm::mat4(1.f), i, glm::vec3(0, 0, 1)) *
-			glm::rotate(glm::mat4(1.f), i, glm::vec3(0, 1, 0));;
+		rot.x += 100.f * delta_time;
+		rot.y += 100.f * delta_time;
+
+		glm::mat4 model = glm::scale(glm::mat4(1.f), glm::vec3(scale));/* *
+			glm::rotate(glm::mat4(1.f), glm::radians(rot.x), glm::vec3(1, 0, 0)) *
+			glm::rotate(glm::mat4(1.f), glm::radians(rot.y), glm::vec3(0, 1, 0)) *
+			glm::rotate(glm::mat4(1.f), glm::radians(rot.z), glm::vec3(0, 0, 1));*/
 		glm::mat4 proj = glm::perspective(glm::radians(90.f),
 			(float)main_window->get_width() / main_window->get_height(),
 			0.01f,
 			100000.f);
 		proj[1][1] *= -1;
 
+		time += delta_time;
 		ubodata u;
 		u.world = model;
 		u.view = view;
 		u.proj = proj;
+		u.time = time;
+		u.sun_dir = glm::vec3(-0.842051, -0.279758, 0.461180);
+		u.cam_pos = cam_pos;
+		u.view_dir = fwd;
+
 		wvp_ubo.update(u);
 
-		const float delta_time = static_cast<float>(delta_time_ms.count()) * 0.001f;
-
-		imgui::new_frame(delta_time, *main_window);
+		u.world = glm::scale(glm::mat4(1.f), glm::vec3(100.f)) *
+			glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1, 0, 0));
+		sky_wvp.update(u);
 
 		ImGui::NewFrame();
 		ImGui::Text("%.0f FPS", 1.f / ImGui::GetIO().DeltaTime, ImGui::GetIO().DeltaTime);
 		ImGui::Text("%.2f ms", ImGui::GetIO().DeltaTime * 1000);
 		ImGui::Text("Mouse Pos: %f %f", ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y);
-		static bool coucou_pass = false;
-		if(ImGui::Checkbox("Coucou pass?", &coucou_pass))
-		{
-			request_new_shader(coucou_pass ? "coucou" : "");
-		}
+		ImGui::Text("Mouse Delta: %d %d", mouse_delta.x, mouse_delta.y);
+		ImGui::Separator();
+		ImGui::Text("Cam Pos: %f %f %f", cam_pos.x, cam_pos.y, cam_pos.z);
+		ImGui::Text("Cam Fwd: %f %f %f", fwd.x, fwd.y, fwd.z);
+		ImGui::Separator();
+		ImGui::Text("Sky Direction: %f %f %f", u.sun_dir.x, u.sun_dir.y, u.sun_dir.z);
 		ImGui::ShowDemoWindow();
 		ImGui::Render();
-
-		ImGui::UpdatePlatformWindows();
-		imgui::draw_viewports();
 
 		if(true) {
 			using namespace gfx;
@@ -306,17 +505,37 @@ void Engine::run()
 				RenderPassInfo::DepthStencilMode::ReadWrite) };
 			render_pass_info.subpasses = subpasses;
 
+
 			device->cmd_begin_render_pass(list, render_pass_info);
-			device->cmd_bind_vertex_buffer(list, vbo.get(), 0);
+
+			/** Sky */
+			device->cmd_bind_vertex_buffer(list, sky_vbo.get(), 0);
 			device->cmd_set_render_pass_state(list, render_pass_state);
+			device->cmd_set_material_state(list, sky_material_state);
+			device->cmd_bind_ubo(list, 0, 0, sky_wvp.get_handle());
+			device->cmd_bind_texture_view(list, 0, 1, sky_tex_view.get());
+			device->cmd_bind_sampler(list, 0, 2, beebo_sampler.get());
+			device->cmd_bind_pipeline_layout(list, sky_shader->get_permutation().get_pipeline_layout());
+			device->cmd_draw(list, sky_positions.size(), 1, 0, 0);
+
+			/** Water */
+			device->cmd_bind_vertex_buffer(list, vbo.get(), 0);
 			device->cmd_set_material_state(list, material_state);
 			device->cmd_bind_ubo(list, 0, 0, wvp_ubo.get_handle());
+			device->cmd_bind_texture_view(list, 0, 1, beebo_view.get());
+			device->cmd_bind_texture_view(list, 0, 3, noise_view.get());
+			device->cmd_bind_texture_view(list, 0, 4, sky_tex_view.get());
+			device->cmd_bind_sampler(list, 0, 2, beebo_sampler.get());
 			device->cmd_bind_pipeline_layout(list, shader_instance->get_permutation().get_pipeline_layout());
 			device->cmd_draw(list, positions.size(), 1, 0, 0);
+
 			device->cmd_end_render_pass(list);
 
 			device->submit(list);
 		}
+
+		ImGui::UpdatePlatformWindows();
+		imgui::draw_viewports();
 
 
 		device->end_frame();
@@ -395,5 +614,21 @@ void Engine::on_cursor_set()
 {
 	imgui::on_cursor_set();
 }
+
+void Engine::on_key_down(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat)
+{
+	imgui::on_key_down(in_key_code, in_character_code, in_repeat);
+}
+
+void Engine::on_key_up(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat)
+{
+	imgui::on_key_up(in_key_code, in_character_code, in_repeat);
+}
+
+void Engine::on_mouse_move(const glm::ivec2& in_delta)
+{
+	mouse_delta += in_delta;
+}
+
 
 }

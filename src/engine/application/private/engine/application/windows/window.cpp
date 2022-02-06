@@ -16,7 +16,7 @@ WindowsWindow::WindowsWindow(
 {
 	const std::wstring wide_name = boost::locale::conv::utf_to_utf<wchar_t, char>(in_name);
 
-	if(in_flags & WindowFlagBits::Borderless)
+	if (in_flags & WindowFlagBits::Borderless)
 		style |= WS_POPUP;
 	else
 		style |= WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
@@ -84,6 +84,13 @@ WindowsWindow::WindowsWindow(
 	}
 
 	ShowWindow(hwnd, in_flags & WindowFlagBits::Maximized ? SW_MAXIMIZE : SW_SHOW);
+
+	RAWINPUTDEVICE rid[1];
+	rid[0].usUsagePage = 0x01;
+	rid[0].usUsage = 0x02;
+	rid[0].dwFlags = 0;
+	rid[0].hwndTarget = nullptr;
+	RegisterRawInputDevices(rid, 1, sizeof(rid[0]));
 }
 
 WindowsWindow::~WindowsWindow()
@@ -145,8 +152,6 @@ void WindowsWindow::show()
 
 LRESULT CALLBACK WindowsWindow::wnd_proc(uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
 {
-	const LRESULT def_result = DefWindowProc(hwnd, in_msg, in_wparam, in_lparam);
-
 	switch(in_msg)
 	{
 	case WM_SIZE:
@@ -162,9 +167,8 @@ LRESULT CALLBACK WindowsWindow::wnd_proc(uint32_t in_msg, WPARAM in_wparam, LPAR
 		break;
 	}
 	}
-
-	application.wnd_proc(*this, in_msg, in_wparam, in_lparam);
-	return def_result;
+	
+	return application.wnd_proc(*this, in_msg, in_wparam, in_lparam);
 }
 
 }

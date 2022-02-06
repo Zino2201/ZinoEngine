@@ -632,6 +632,9 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture(const Text
 	if(in_create_info.usage_flags & TextureUsageFlagBits::TransferDst)
 		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
+	if (in_create_info.usage_flags & TextureUsageFlagBits::Cube)
+		create_info.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+
 	VmaAllocationCreateInfo alloc_create_info = {};
 	alloc_create_info.flags = 0;
 	alloc_create_info.usage = convert_memory_usage(in_create_info.mem_usage);	

@@ -3,6 +3,7 @@
 #include <memory>
 #include "engine/application/message_handler.hpp"
 #include "engine/gfx/device.hpp"
+#include "glm/vec3.hpp"
 
 namespace ze
 {
@@ -26,6 +27,9 @@ private:
 	void on_mouse_wheel(platform::Window& in_window, const float in_delta, const glm::ivec2& in_mouse_pos) override;
 	void on_mouse_double_click(platform::Window& in_window, platform::MouseButton in_button, const glm::ivec2& in_mouse_pos) override;
 	void on_cursor_set() override;
+	void on_key_down(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat) override;
+	void on_key_up(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat) override;
+	void on_mouse_move(const glm::ivec2& in_delta) override;
 private:
 	bool running;
 	std::unique_ptr<platform::Window> main_window;
@@ -35,6 +39,7 @@ private:
 	gfx::UniqueSwapchain swapchain;
 	gfx::UniqueTexture depth_buffer;
 	gfx::UniqueTextureView depth_buffer_view;
+	glm::ivec2 mouse_delta;
 };
 
 }

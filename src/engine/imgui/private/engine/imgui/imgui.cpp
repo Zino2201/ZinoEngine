@@ -330,11 +330,10 @@ void update_mouse_cursor()
 
 	if (io.MouseDrawCursor || cursor == ImGuiMouseCursor_None)
 	{
-		platform->get_application().set_show_cursor(false);
+		platform->get_application().set_cursor(nullptr);
 	}
 	else
 	{
-		platform->get_application().set_show_cursor(true);
 		platform->get_application().set_cursor(mouse_cursors[cursor] ? mouse_cursors[cursor].get() : mouse_cursors[ImGuiMouseCursor_Arrow].get());
 	}
 }
@@ -417,7 +416,11 @@ void draw_viewport(ImGuiViewport* viewport)
 	render_pass_info.render_area = Rect2D(0, 0, 
 		static_cast<uint32_t>(viewport->Size.x), static_cast<uint32_t>(viewport->Size.y));
 	render_pass_info.color_attachments = color_attachments;
-	render_pass_info.clear_attachment_flags = 1 << 0;
+
+	if(viewport == ImGui::GetMainViewport())
+		render_pass_info.load_attachment_flags = 1 << 0;
+	else
+		render_pass_info.clear_attachment_flags = 1 << 0;
 	render_pass_info.store_attachment_flags = 1 << 0;
 	render_pass_info.clear_values = clear_values;
 
@@ -604,6 +607,79 @@ void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t 
 void on_cursor_set()
 {
 	update_mouse_cursor();
+}
+
+static ImGuiKey virtual_key_to_imgui_key(platform::KeyCode in_key_code)
+{
+	switch (in_key_code)
+	{
+	case platform::KeyCode::Num0: return ImGuiKey_0;
+	case platform::KeyCode::Num1: return ImGuiKey_1;
+	case platform::KeyCode::Num2: return ImGuiKey_2;
+	case platform::KeyCode::Num3: return ImGuiKey_3;
+	case platform::KeyCode::Num4: return ImGuiKey_4;
+	case platform::KeyCode::Num5: return ImGuiKey_5;
+	case platform::KeyCode::Num6: return ImGuiKey_6;
+	case platform::KeyCode::Num7: return ImGuiKey_7;
+	case platform::KeyCode::Num8: return ImGuiKey_8;
+	case platform::KeyCode::Num9: return ImGuiKey_9;
+	case platform::KeyCode::A: return ImGuiKey_A;
+	case platform::KeyCode::B: return ImGuiKey_B;
+	case platform::KeyCode::C: return ImGuiKey_C;
+	case platform::KeyCode::D: return ImGuiKey_D;
+	case platform::KeyCode::E: return ImGuiKey_E;
+	case platform::KeyCode::F: return ImGuiKey_F;
+	case platform::KeyCode::G: return ImGuiKey_G;
+	case platform::KeyCode::H: return ImGuiKey_H;
+	case platform::KeyCode::I: return ImGuiKey_I;
+	case platform::KeyCode::J: return ImGuiKey_J;
+	case platform::KeyCode::K: return ImGuiKey_K;
+	case platform::KeyCode::L: return ImGuiKey_L;
+	case platform::KeyCode::M: return ImGuiKey_M;
+	case platform::KeyCode::N: return ImGuiKey_N;
+	case platform::KeyCode::O: return ImGuiKey_O;
+	case platform::KeyCode::P: return ImGuiKey_P;
+	case platform::KeyCode::Q: return ImGuiKey_Q;
+	case platform::KeyCode::R: return ImGuiKey_R;
+	case platform::KeyCode::S: return ImGuiKey_S;
+	case platform::KeyCode::T: return ImGuiKey_T;
+	case platform::KeyCode::U: return ImGuiKey_U;
+	case platform::KeyCode::V: return ImGuiKey_V;
+	case platform::KeyCode::W: return ImGuiKey_W;
+	case platform::KeyCode::X: return ImGuiKey_X;
+	case platform::KeyCode::Y: return ImGuiKey_Y;
+	case platform::KeyCode::Z: return ImGuiKey_Z;
+	case platform::KeyCode::Numpad0: return ImGuiKey_Keypad0;
+	case platform::KeyCode::Numpad1: return ImGuiKey_Keypad1;
+	case platform::KeyCode::Numpad2: return ImGuiKey_Keypad2;
+	case platform::KeyCode::Numpad3: return ImGuiKey_Keypad3;
+	case platform::KeyCode::Numpad4: return ImGuiKey_Keypad4;
+	case platform::KeyCode::Numpad5: return ImGuiKey_Keypad5;
+	case platform::KeyCode::Numpad6: return ImGuiKey_Keypad6;
+	case platform::KeyCode::Numpad7: return ImGuiKey_Keypad7;
+	case platform::KeyCode::Numpad8: return ImGuiKey_Keypad8;
+	case platform::KeyCode::Numpad9: return ImGuiKey_Keypad9;
+	case platform::KeyCode::Escape: return ImGuiKey_Escape;
+	case platform::KeyCode::LeftControl: return ImGuiKey_LeftCtrl;
+	case platform::KeyCode::RightControl: return ImGuiKey_RightCtrl;
+	case platform::KeyCode::LeftAlt: return ImGuiKey_LeftAlt;
+	case platform::KeyCode::RightAlt: return ImGuiKey_RightAlt;
+	case platform::KeyCode::LeftShift: return ImGuiKey_LeftShift;
+	case platform::KeyCode::RightShift: return ImGuiKey_RightShift;
+	default: return ImGuiKey_None;
+	}
+}
+
+void on_key_down(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat)
+{
+	ImGui::GetIO().AddKeyEvent(virtual_key_to_imgui_key(in_key_code), true);
+	UnusedParameters{ in_character_code, in_repeat };
+}
+
+void on_key_up(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat)
+{
+	ImGui::GetIO().AddKeyEvent(virtual_key_to_imgui_key(in_key_code), false);
+	UnusedParameters{ in_character_code, in_repeat };
 }
 
 }

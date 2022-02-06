@@ -87,7 +87,7 @@ void info(const Category& in_category, const fmt::format_string<Args...>& in_for
 }
 
 template<typename... Args>
-void info(const std::string_view& in_format, Args&&... in_args)
+void info(const fmt::format_string<Args...>& in_format, Args&&... in_args)
 {
 	info(log_unknown, in_format, std::forward<Args>(in_args)...);
 }

@@ -13,7 +13,7 @@ WindowsApplication* windows_platform_application = nullptr;
 
 WindowsApplication::WindowsApplication(
 	HINSTANCE in_instance)
-	: message_handler(nullptr), instance(in_instance)
+	: message_handler(nullptr), instance(in_instance), window_locking_cursor(nullptr)
 {
 	windows_platform_application = this;
 
@@ -85,7 +85,7 @@ void WindowsApplication::update_monitors()
 		reinterpret_cast<LPARAM>(this));
 }
 
-void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
+LRESULT WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPARAM in_wparam, LPARAM in_lparam)
 {
 	auto convert_button = [](uint32_t in_msg) -> MouseButton
 	{
@@ -118,6 +118,8 @@ void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPA
 		}
 		case WM_SIZE:
 		{
+			if (&in_window == window_locking_cursor)
+				update_clip_cursor(window_locking_cursor);
 			message_handler->on_resized_window(in_window, in_window.get_width(), in_window.get_height());
 			break;
 		}
@@ -159,8 +161,58 @@ void WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, WPA
 				message_handler->on_cursor_set();
 			break;
 		}
+		case WM_CHAR:
+		{
+			return 0;
+		}
+		case WM_SYSKEYDOWN:
+		case WM_KEYDOWN:
+		{
+			const int32_t key_code = in_wparam;
+			const bool is_repeat = (in_lparam & 0x40000000) != 0;
+			const uint32_t character_code = ::MapVirtualKeyW(key_code, MAPVK_VK_TO_CHAR);
+			message_handler->on_key_down(convert_win_character_code(key_code), character_code, is_repeat);
+			if (in_msg != WM_SYSKEYDOWN)
+				return 0;
+			break;
+		}
+		case WM_SYSKEYUP:
+		case WM_KEYUP:
+		{
+			const int32_t key_code = in_wparam;
+			const bool is_repeat = (in_lparam & 0x40000000) != 0;
+			const uint32_t character_code = ::MapVirtualKeyW(key_code, MAPVK_VK_TO_CHAR);
+			message_handler->on_key_up(convert_win_character_code(key_code), character_code, is_repeat);
+			return 0;
+		}
+		case WM_INPUT:
+		{
+			UINT data_size = sizeof(RAWINPUT);
+			static BYTE lpb[sizeof(RAWINPUT)];
+			GetRawInputData(reinterpret_cast<HRAWINPUT>(in_lparam), RID_INPUT, lpb, &data_size, sizeof(RAWINPUTHEADER));
+			auto* raw = reinterpret_cast<RAWINPUT*>(lpb);
+
+			if (raw->header.dwType == RIM_TYPEMOUSE)
+			{
+				message_handler->on_mouse_move({ raw->data.mouse.lLastX, raw->data.mouse.lLastY });
+			}
+
+			break;
+		}
+		case WM_SETFOCUS:
+		{
+			update_clip_cursor(window_locking_cursor);
+			break;
+		}
+		case WM_KILLFOCUS:
+		{
+			update_clip_cursor(nullptr);
+			break;
+		}
 		}
 	}
+
+	return DefWindowProc(in_window.get_hwnd(), in_msg, in_wparam, in_lparam);
 }
 
 void WindowsApplication::register_window(WindowsWindow* window)
@@ -211,11 +263,26 @@ std::unique_ptr<Window> WindowsApplication::create_window(const std::string& in_
 		in_flags);
 }
 
+void WindowsApplication::set_mouse_pos(const glm::ivec2& in_pos)
+{
+	::SetCursorPos(in_pos.x, in_pos.y);
+}
+
 glm::ivec2 WindowsApplication::get_mouse_pos() const
 {
 	POINT point;
 	::GetCursorPos(&point);
 	return { point.x, point.y };
+}
+
+void WindowsApplication::set_capture(const Window& in_window)
+{
+	::SetCapture(static_cast<HWND>(in_window.get_handle()));
+}
+
+void WindowsApplication::release_capture()
+{
+	::ReleaseCapture();
 }
 
 const MonitorInfo& WindowsApplication::get_monitor_info(uint32_t in_monitor) const
@@ -278,6 +345,95 @@ void WindowsApplication::set_cursor(Cursor* in_cursor)
 void WindowsApplication::set_show_cursor(bool in_show)
 {
 	ShowCursor(in_show);
+}
+
+void WindowsApplication::lock_cursor(Window* in_window)
+{
+	window_locking_cursor = static_cast<WindowsWindow*>(in_window);
+	update_clip_cursor(window_locking_cursor);
+}
+
+void WindowsApplication::unlock_cursor()
+{
+	window_locking_cursor = nullptr;
+	update_clip_cursor(nullptr);
+}
+
+void WindowsApplication::update_clip_cursor(WindowsWindow* window)
+{
+	if(window)
+	{
+		RECT clip_rect;
+		GetClientRect(window->get_hwnd(), &clip_rect);
+		ClientToScreen(window->get_hwnd(), reinterpret_cast<POINT*>(&clip_rect.left));
+		ClientToScreen(window->get_hwnd(), reinterpret_cast<POINT*>(&clip_rect.right));
+		ClipCursor(&clip_rect);
+	}
+	else
+	{
+		ClipCursor(nullptr);
+	}
+}
+
+KeyCode WindowsApplication::convert_win_character_code(int32_t in_character_code) const
+{
+	switch (in_character_code)
+	{
+	case '0': return KeyCode::Num0;
+	case '1': return KeyCode::Num1;
+	case '2': return KeyCode::Num2;
+	case '3': return KeyCode::Num3;
+	case '4': return KeyCode::Num4;
+	case '5': return KeyCode::Num5;
+	case '6': return KeyCode::Num6;
+	case '7': return KeyCode::Num7;
+	case '8': return KeyCode::Num8;
+	case '9': return KeyCode::Num9;
+	case 'A': return KeyCode::A;
+	case 'B': return KeyCode::B;
+	case 'C': return KeyCode::C;
+	case 'D': return KeyCode::D;
+	case 'E': return KeyCode::E;
+	case 'F': return KeyCode::F;
+	case 'G': return KeyCode::G;
+	case 'H': return KeyCode::H;
+	case 'I': return KeyCode::I;
+	case 'J': return KeyCode::J;
+	case 'K': return KeyCode::K;
+	case 'L': return KeyCode::L;
+	case 'M': return KeyCode::M;
+	case 'N': return KeyCode::N;
+	case 'O': return KeyCode::O;
+	case 'P': return KeyCode::P;
+	case 'Q': return KeyCode::Q;
+	case 'R': return KeyCode::R;
+	case 'S': return KeyCode::S;
+	case 'T': return KeyCode::T;
+	case 'U': return KeyCode::U;
+	case 'V': return KeyCode::V;
+	case 'W': return KeyCode::W;
+	case 'X': return KeyCode::X;
+	case 'Y': return KeyCode::Y;
+	case 'Z': return KeyCode::Z;
+	case VK_NUMPAD0: return KeyCode::Numpad0;
+	case VK_NUMPAD1: return KeyCode::Numpad1;
+	case VK_NUMPAD2: return KeyCode::Numpad2;
+	case VK_NUMPAD3: return KeyCode::Numpad3;
+	case VK_NUMPAD4: return KeyCode::Numpad4;
+	case VK_NUMPAD5: return KeyCode::Numpad5;
+	case VK_NUMPAD6: return KeyCode::Numpad6;
+	case VK_NUMPAD7: return KeyCode::Numpad7;
+	case VK_NUMPAD8: return KeyCode::Numpad8;
+	case VK_NUMPAD9: return KeyCode::Numpad9;
+	case VK_ESCAPE: return KeyCode::Escape;
+	case VK_LCONTROL: return KeyCode::LeftControl;
+	case VK_RCONTROL: return KeyCode::RightControl;
+	case VK_LMENU: return KeyCode::LeftAlt;
+	case VK_RMENU: return KeyCode::RightAlt;
+	case VK_SHIFT: return KeyCode::LeftShift;
+	case VK_RSHIFT: return KeyCode::RightShift;
+	default: return KeyCode::None;
+	}
 }
 
 WindowsWindow* WindowsApplication::get_window_by_hwnd(HWND in_hwnd) const

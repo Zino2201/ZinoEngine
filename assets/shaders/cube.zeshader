@@ -3,14 +3,17 @@ shader "Cube"
 	struct VertexInput
 	{
 		float3 position : POSITION;
+		float2 texcoord : TEXCOORD0;
 		float3 normal : NORMAL;
 	};
 
 	struct VertexOutput
 	{
 		float4 position : SV_POSITION;
+		float2 texcoord : TEXCOORD0;
 		float3 normal : NORMAL;
-		float3 world_pos : TEXCOORD0;
+		float3 world_pos : TEXCOORD1;
+		float3 world_normal : TEXCOORD3;
 	};
 
 	cbuffer GlobalData : register(b0)
@@ -18,34 +21,17 @@ shader "Cube"
 		float4x4 world;
 		float4x4 view;
 		float4x4 proj;
+		float time;
+		float3 sun_dir;
+		float3 view_pos;
+		float _pad01;
+		float3 view_dir;
 	};
 
-	pass "coucou"
-	{
-		vertex
-		{
-		
-			VertexOutput main(VertexInput input)
-			{
-				VertexOutput output;
-
-				float4x4 WVP = mul(world, mul(view, proj));
-				output.position = mul(float4(input.position, 1.0), WVP);
-				output.normal = input.normal;
-				output.world_pos = mul(float4(input.position, 1.0), world).xyz;
-
-				return output;
-			}
-		}
-
-		fragment
-		{
-			float4 main(VertexOutput input) : SV_TARGET0
-			{
-				return float4(0, 0, input.world_pos.x, 1);
-			}
-		}
-	}
+	Texture2D texture : register(t1);
+	Texture2D noise_texture : register(t3);
+	TextureCube sky_texture : register(t4);
+	SamplerState texture_sampler : register(s2);
 
 	vertex
 	{
@@ -53,10 +39,15 @@ shader "Cube"
 		{
 			VertexOutput output;
 
-			float4x4 WVP = mul(world, mul(view, proj));
-	        output.position = mul(float4(input.position, 1.0), WVP);
+			float4 world_pos = mul(float4(input.position, 1.0), world);
+			float noise = noise_texture.SampleLevel(texture_sampler, world_pos.xy, 0.0).r;
+			world_pos.z += sin(time * noise * 2.0) * 0.075;
+
+	        output.position = mul(world_pos, mul(view, proj));
+	        output.texcoord = input.texcoord;
             output.normal = input.normal;
-            output.world_pos = mul(float4(input.position, 1.0), world).xyz;
+            output.world_pos = world_pos.xyz;
+            output.world_normal = mul(float4(input.normal, 1.0), world).xyz;
 
 			return output;
 		}
@@ -66,13 +57,27 @@ shader "Cube"
 	{
 		float4 main(VertexOutput input) : SV_TARGET0
 		{
-			const float3 light_pos = float3(1.5, 0, 0);
-            
+			input.texcoord.x += time * 0.025;
+			input.texcoord.y += time * 0.028;
+
             float3 norm = normalize(input.normal);
-            float3 light_dir = normalize(light_pos - input.world_pos);
+            float3 light_dir = normalize(sun_dir);
             float diff = max(dot(norm, light_dir), 0.0);
 
-            return float4(input.world_pos, 1.0);
+			float specular_strength = 0.8;
+			float3 view_dir = normalize(view_pos - input.world_pos);
+			float3 reflect_dir = reflect(-light_dir, norm);  
+			float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 8);
+			
+			float3 specular = specular_strength * spec * noise_texture.Sample(texture_sampler, input.texcoord).rgb;
+			float3 diffuse = texture.Sample(texture_sampler, input.texcoord).rgb * diff;
+
+			float3 I = normalize(input.world_pos - view_pos);
+			I.y = 1;
+			float3 R = reflect(I, input.world_normal);
+			diffuse = lerp(diffuse, sky_texture.Sample(texture_sampler, R).rgb, 0.9);
+
+            return float4(diffuse + specular, 1.0);
 		}
 	}
 }

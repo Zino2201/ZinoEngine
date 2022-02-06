@@ -1,0 +1,50 @@
+shader "Sky"
+{
+	struct VertexInput
+	{
+		float3 position : POSITION;
+		float2 texcoord : TEXCOORD0;
+		float3 normal : NORMAL;
+	};
+
+	struct VertexOutput
+	{
+		float4 position : SV_POSITION;
+		float3 texcoord : TEXCOORD0;
+	};
+
+	cbuffer GlobalData : register(b0)
+	{
+		float4x4 world;
+		float4x4 view;
+		float4x4 proj;
+		float time;
+		float3 light_pos;
+		float3 view_pos;
+	};
+
+	TextureCube texture : register(t1);
+	SamplerState texture_sampler : register(s2);
+
+	vertex
+	{
+		VertexOutput main(VertexInput input)
+		{
+			VertexOutput output;
+
+			float4 world_pos = mul(float4(input.position, 1.0), world);
+	        output.position = mul(world_pos, mul(view, proj));
+	        output.texcoord = input.position;
+
+			return output;
+		}
+	}
+
+	fragment
+	{
+		float4 main(VertexOutput input) : SV_TARGET0
+		{
+            return texture.Sample(texture_sampler, input.texcoord);
+		}
+	}
+}
