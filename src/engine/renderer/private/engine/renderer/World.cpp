@@ -3,6 +3,8 @@
 namespace ze::renderer
 {
 
+#if 0
+
 size_t World::add_node(RenderNode&& in_node)
 {
 	size_t node = nodes.add(std::move(in_node));
@@ -109,5 +111,7 @@ MeshBatch& World::merge_or_add_to_compatible_batch(const RenderNode::MeshData& i
 
 	return batches[idx];
 }
+
+#endif
 
 }

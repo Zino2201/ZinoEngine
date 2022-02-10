@@ -29,27 +29,6 @@ class Backend;
 class BackendDevice;
 class Device;
 
-/**
- * Pipeline state associated to a render pass
- */
-struct PipelineRenderPassState
-{
-	PipelineColorBlendStateCreateInfo color_blend;	
-	PipelineDepthStencilStateCreateInfo depth_stencil;	
-	PipelineMultisamplingStateCreateInfo multisampling;
-};
-
-/**
- * Pipeline state associated to an instance
- */
-struct PipelineMaterialState
-{
-	std::span<PipelineShaderStage> stages;
-	PipelineVertexInputStateCreateInfo vertex_input;
-	PipelineInputAssemblyStateCreateInfo input_assembly;
-	PipelineRasterizationStateCreateInfo rasterizer;
-};
-
 namespace detail
 {
 
@@ -202,34 +181,19 @@ public:
 	CommandList(Device& in_device,
 		const BackendDeviceResource& in_list,
 		const QueueType& in_type,
-		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_list, in_debug_name),
-		type(in_type), render_pass(null_backend_resource), pipeline_state_dirty(false), is_compute_shader(false), dirty_sets_mask(0) {}
-
+		const std::string_view& in_debug_name);
 	void reset();
 	void prepare_draw();
-	void prepare_compute();
-	void set_render_pass(const BackendDeviceResource& in_handle) { render_pass = in_handle; }
-	void set_pipeline_layout(const PipelineLayoutHandle& in_handle) { pipeline_layout = in_handle; pipeline_state_dirty = true; }
-	void set_render_pass_state(const PipelineRenderPassState& in_state) { render_pass_state = in_state; pipeline_state_dirty = true; }
-	void set_material_state(const PipelineMaterialState& in_state)
-	{
-		material_state = in_state;
-		pipeline_state_dirty = true;
-		is_compute_shader = false;
-	}
-
-	void set_descriptor(size_t in_set, size_t in_binding, const Descriptor& in_descriptor)
-	{
-		descriptors[in_set][in_binding] = in_descriptor;
-		dirty_sets_mask = 1 << in_set;
-	}
-
-	void set_compute_shader(PipelineShaderStage in_shader)
-	{
-		compute_shader = in_shader;
-		pipeline_state_dirty = true;
-		is_compute_shader = true;
-	}
+	void set_render_pass(const BackendDeviceResource& in_handle);
+	void set_pipeline_layout(const PipelineLayoutHandle& in_handle);
+	void set_descriptor(uint32_t in_set, uint32_t in_binding, const Descriptor& in_descriptor);
+	void set_depth_stencil_state(const PipelineDepthStencilStateCreateInfo& in_state);
+	void set_multisampling_state(const PipelineMultisamplingStateCreateInfo& in_info);
+	void set_color_blend_state(const PipelineColorBlendStateCreateInfo& in_info);
+	void set_vertex_input_state(const PipelineVertexInputStateCreateInfo& in_info);
+	void set_input_assembly_state(const PipelineInputAssemblyStateCreateInfo& in_info);
+	void set_rasterization_state(const PipelineRasterizationStateCreateInfo& in_info);
+	void bind_shader(const PipelineShaderStage& in_stage);
 
 	[[nodiscard]] QueueType get_queue_type() const { return type; }
 private:
@@ -239,15 +203,22 @@ private:
 	QueueType type;
 	PipelineLayoutHandle pipeline_layout;
 	BackendDeviceResource render_pass;
-	PipelineShaderStage compute_shader;
-	PipelineRenderPassState render_pass_state;
-	PipelineMaterialState material_state;
+
+	/** Pipeline states */
+	PipelineColorBlendStateCreateInfo color_blend_state;
+	PipelineDepthStencilStateCreateInfo depth_stencil_state;
+	PipelineMultisamplingStateCreateInfo multisampling_state;
+	std::vector<PipelineShaderStage> stages;
+	PipelineVertexInputStateCreateInfo vertex_input_state;
+	PipelineInputAssemblyStateCreateInfo input_assembly_state;
+	PipelineRasterizationStateCreateInfo rasterizer_state;
 	bool pipeline_state_dirty;
-	bool is_compute_shader;
+	bool has_compute_stage;
 	std::array<std::array<Descriptor, max_bindings>, max_descriptor_sets> descriptors;
+	std::vector<BackendDeviceResource> bound_descriptor_sets;
 
 	/** Bitmask used to keep track of which descriptor sets to update */
-	uint8_t dirty_sets_mask;
+	uint32_t dirty_sets_mask;
 };
 
 class Fence : public BackendResourceWrapper<DeviceResourceType::Fence>
@@ -370,6 +341,14 @@ struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 		return BufferInfo(BufferCreateInfo(in_size, 
 			MemoryUsage::CpuToGpu, 
 			BufferUsageFlags(BufferUsageFlagBits::UniformBuffer)));
+	}
+
+	static BufferInfo make_ssbo_cpu_visible(const size_t in_size, const std::span<uint8_t> in_initial_data = {})
+	{
+		return BufferInfo(BufferCreateInfo(in_size,
+			MemoryUsage::CpuToGpu,
+			BufferUsageFlags(BufferUsageFlagBits::StorageBuffer)),
+			in_initial_data);
 	}
 
 	static BufferInfo make_vertex_buffer_cpu_visible(const size_t in_size)
@@ -764,13 +743,21 @@ public:
 
 	/** Pipeline management */
 	void cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list, const PipelineLayoutHandle& in_handle);
-	void cmd_bind_compute_shader(const CommandListHandle& in_cmd_list, const PipelineShaderStage& in_shader);
-	void cmd_set_render_pass_state(const CommandListHandle& in_cmd_list, const PipelineRenderPassState& in_state);
-	void cmd_set_material_state(const CommandListHandle& in_cmd_list, const PipelineMaterialState& in_state);
+	void cmd_set_depth_stencil_state(const CommandListHandle& in_cmd_list, const PipelineDepthStencilStateCreateInfo& in_state);
+	void cmd_set_multisampling_state(const CommandListHandle& in_cmd_list, const PipelineMultisamplingStateCreateInfo& in_info);
+	void cmd_set_color_blend_state(const CommandListHandle& in_cmd_list, const PipelineColorBlendStateCreateInfo& in_info);
+	void cmd_set_vertex_input_state(const CommandListHandle& in_cmd_list, const PipelineVertexInputStateCreateInfo& in_info);
+	void cmd_set_input_assembly_state(const CommandListHandle& in_cmd_list, const PipelineInputAssemblyStateCreateInfo& in_info);
+	void cmd_set_rasterization_state(const CommandListHandle& in_cmd_list, const PipelineRasterizationStateCreateInfo& in_info);
+	void cmd_bind_shader(const CommandListHandle& in_cmd_list, const PipelineShaderStage& in_stage);
+
+	/** Dynamic states */
 	void cmd_set_scissor(const CommandListHandle& in_cmd_list, const Rect2D& in_scissor);
 
 	/** Descriptor management */
 	void cmd_bind_ubo(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
+		const BufferHandle& in_handle);
+	void cmd_bind_ssbo(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding,
 		const BufferHandle& in_handle);
 	void cmd_bind_sampler(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
 		const SamplerHandle& in_handle);

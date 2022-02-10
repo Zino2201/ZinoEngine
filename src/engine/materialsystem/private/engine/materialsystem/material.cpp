@@ -1,20 +1,10 @@
 #include "engine/materialsystem/material.hpp"
 #include "engine/shadersystem/shader_manager.hpp"
 
-namespace ze::materialsystem
+namespace ze
 {
 
-Material::Material(shadersystem::ShaderManager& in_shader_manager) : shader_manager(in_shader_manager) {}
+Material::Material(shadersystem::Shader* in_shader) : shader(in_shader) {}
 
-const MaterialPass* Material::get_pass(const std::string& in_name) const
-{
-	for(const auto& pass : passes)
-	{
-		if (pass->pass == in_name)
-			return pass.get();
-	}
-
-	return nullptr;
-}
 
 }

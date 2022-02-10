@@ -17,8 +17,7 @@ TextureHandle font_texture;
 TextureViewHandle font_texture_view;
 std::unique_ptr<shadersystem::ShaderInstance> shader_instance;
 std::vector<PipelineShaderStage> shader_stages;
-PipelineRenderPassState render_pass_state;
-PipelineMaterialState material_state;
+PipelineVertexInputStateCreateInfo vertex_input_state;
 std::vector<std::unique_ptr<platform::Cursor>> mouse_cursors;
 ImGuiMouseCursor last_mouse_cursor;
 
@@ -238,19 +237,15 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 		shader_stages.emplace_back(ShaderStageFlagBits::Fragment, Device::get_backend_shader(*fragment_shader->second), "main");
 	}
 
-	/** Setup render pass state */
-	render_pass_state.color_blend = PipelineColorBlendStateCreateInfo(false,
-			LogicOp::NoOp,
-			color_blend_states);
 
 	/** Setup material state */
-	material_state.vertex_input.input_binding_descriptions =
+	vertex_input_state.input_binding_descriptions =
 	{
 		VertexInputBindingDescription(0,
 			sizeof(ImDrawVert),
 			VertexInputRate::Vertex)
 	};
-	material_state.vertex_input.input_attribute_descriptions =
+	vertex_input_state.input_attribute_descriptions =
 	{
 		VertexInputAttributeDescription(0, 0,
 			Format::R32G32Sfloat, 
@@ -262,7 +257,6 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 			Format::R8G8B8A8Unorm, 
 			offsetof(ImDrawVert, col)),
 	};
-	material_state.stages = shader_stages;
 
 	update_monitors();
 }
@@ -434,8 +428,12 @@ void draw_viewport(ImGuiViewport* viewport)
 	get_device()->cmd_begin_render_pass(list, render_pass_info);
 
 	get_device()->cmd_bind_pipeline_layout(list, shader_instance->get_permutation().get_pipeline_layout());
-	get_device()->cmd_set_render_pass_state(list, render_pass_state);
-	get_device()->cmd_set_material_state(list, material_state);
+	get_device()->cmd_set_vertex_input_state(list, vertex_input_state);
+	get_device()->cmd_bind_shader(list, shader_stages[0]);
+	get_device()->cmd_bind_shader(list, shader_stages[1]);
+	get_device()->cmd_set_color_blend_state(list, { false,
+		LogicOp::NoOp,
+		color_blend_states });
 
 	get_device()->cmd_bind_ubo(list, 0, 0, renderer_data->draw_data.global_data.get_handle());
 	get_device()->cmd_bind_sampler(list, 0, 1, sampler);

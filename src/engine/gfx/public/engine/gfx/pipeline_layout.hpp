@@ -13,6 +13,7 @@ enum class DescriptorType
 	UniformBuffer,
 	Sampler,
 	SampledTexture,
+	StorageBuffer,
 	StorageTexture,
 	InputAttachment
 };

@@ -1,0 +1,183 @@
+shader "Water"
+{
+	struct VertexInput
+	{
+		float3 position : POSITION;
+		float2 texcoord : TEXCOORD0;
+		float3 normal : NORMAL;
+	};
+
+	struct VertexOutput
+	{
+		float4 position : SV_POSITION;
+		float2 texcoord : TEXCOORD0;
+		float3 normal : NORMAL;
+		float3 world_pos : TEXCOORD1;
+		float3 world_normal : TEXCOORD3;
+	};
+
+	cbuffer GlobalData : register(b0)
+	{
+		float4x4 world;
+		float4x4 view;
+		float4x4 proj;
+		float time;
+		float3 sun_dir;
+		float3 view_pos;
+		float _pad01;
+		float3 view_dir;
+	};
+
+	Texture2D texture : register(t1);
+	SamplerState texture_sampler : register(s2);
+	Texture2D roughness_texture : register(t3);
+	Texture2D metallic_texture : register(t4);
+	Texture2D normal_texture : register(t5);
+	TextureCube sky_texture : register(t6);
+
+	struct Surface
+	{
+		float3 base_color;
+		float roughness;
+		float specular;
+		float metallic;
+		float3 normal;
+		float ao;
+	};
+
+	Surface get_surface(VertexOutput input)
+	{
+		Surface surface;
+
+		input.texcoord.y = 1.0 - input.texcoord.y;
+		surface.base_color = texture.Sample(texture_sampler, input.texcoord).rgb;
+		surface.roughness = roughness_texture.Sample(texture_sampler, input.texcoord).r;
+		surface.ao = metallic_texture.Sample(texture_sampler, input.texcoord).r;
+		surface.specular = 0.0;
+		surface.metallic = 0.0;
+
+		float3 tangent = normal_texture.Sample(texture_sampler, input.texcoord).rgb * 2.0 - 1.0;
+
+		float3 q1 = ddx(input.world_pos);
+		float3 q2 = ddy(input.world_pos);
+		float2 st1 = ddx(input.texcoord);
+		float2 st2 = ddy(input.texcoord);
+
+		float3 n = normalize(input.normal);
+		float3 t = normalize(q1 * st2.x - q2 * st1.x);
+		float3 b = -normalize(cross(n, t));
+		float3x3 tbn = float3x3(t, b, n);
+		surface.normal = normalize(mul(tangent, tbn));
+
+		return surface;
+	}
+
+	vertex
+	{
+		VertexOutput main(VertexInput input)
+		{
+			VertexOutput output;
+
+			float4 world_pos = mul(float4(input.position, 1.0), world);
+
+	        output.position = mul(world_pos, mul(view, proj));
+	        output.texcoord = input.texcoord;
+            output.normal = input.normal;
+            output.world_pos = world_pos.xyz;
+            output.world_normal = mul(float4(input.normal, 1.0), world).xyz;
+
+			return output;
+		}
+	}
+
+	fragment
+	{
+		static const float PI = 3.14159265f;
+
+		float3 fresnel_schlick(float cos_theta, float3 f0)
+		{
+			return f0 + (1.0 - f0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
+		}
+
+		float distribution_ggx(float3 N, float3 H, float roughness)
+		{
+			float a = roughness * roughness;
+			float a2 = a * a;
+			float ndoth = max(dot(N, H), 0.0);
+			float ndoth2 = ndoth * ndoth;
+
+			float nom = a2;
+			float denom = (ndoth2 * (a2 - 1.0) + 1.0);
+			denom = PI * denom * denom;
+			
+			return nom / denom;
+		}
+
+		float geometry_schlick_ggx(float ndotv, float roughness)
+		{
+			float r = (roughness + 1.0);
+			float k = (r * r) / 8.0;
+			
+			float nom = ndotv;
+			float denom = ndotv * (1.0 - k) + k;
+
+			return nom / denom;
+		}
+
+		float geometry_smith(float3 N, float3 V, float3 L, float roughness)
+		{
+			float ndotv = max(dot(N, V), 0.0);
+			float ndotl = max(dot(N, L), 0.0);
+			float ggx1 = geometry_schlick_ggx(ndotl, roughness);
+			float ggx2 = geometry_schlick_ggx(ndotv, roughness);
+			return ggx1 * ggx2;
+		}
+
+		float4 main(VertexOutput input) : SV_TARGET0
+		{
+			Surface surface = get_surface(input);
+			float3 N = normalize(surface.normal);
+			float3 V = normalize(view_pos - input.world_pos);
+
+			float3 f0 = float3(0.04, 0.04, 0.04);
+			f0 = lerp(f0, surface.base_color, surface.metallic);
+
+			float3 lo = 0.0;
+
+			const float3 light_pos = sun_dir;
+
+			/** Light */
+			{
+				float3 L = normalize(light_pos - input.world_pos);
+				float3 H = normalize(V + L);
+				
+				float distance = length(light_pos - input.world_pos);
+				float attenuation = 1.0 / (distance * distance);
+				float3 radiance = float3(1, 1, 1) * attenuation;
+
+				float ndf = distribution_ggx(N, H, surface.roughness);
+				float G = geometry_smith(N, V, L, surface.roughness);
+				float3 f = fresnel_schlick(max(dot(H, V), 0.0), f0);
+
+				float3 numerator = ndf * G * f;
+				float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+				float3 specular = numerator / denominator;
+
+				float3 ks = f;
+				float3 kd = float3(1.0, 1.0, 1.0) - ks;
+				kd *= 1.0 - surface.metallic;
+
+				float ndotl = max(dot(N, L), 0.0);
+				lo += (kd * surface.base_color / PI + specular) * radiance * ndotl;
+			}
+
+			float3 ambient = float3(0.03, 0.03, 0.03) * surface.base_color * surface.ao;
+			float3 color = ambient + lo;
+
+			color = color / (color + float3(1.0, 1.0, 1.0));
+			color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+
+			return float4(color, 1.0);
+		}
+	}
+}

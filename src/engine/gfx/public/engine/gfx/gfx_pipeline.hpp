@@ -96,7 +96,7 @@ enum class FrontFace
 };
 
 /**
- * Describe the rasterizer state
+ * Describe the rasterizer_state state
  */
 struct PipelineRasterizationStateCreateInfo
 {

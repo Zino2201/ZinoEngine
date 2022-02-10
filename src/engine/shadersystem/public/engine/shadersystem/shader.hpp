@@ -31,6 +31,20 @@ enum class ShaderPermutationState
 class ShaderPermutation
 {
 public:
+	struct ParameterInfo
+	{
+		uint32_t set;
+		uint32_t binding;
+		size_t offset;
+	};
+
+	struct ResourceInfo
+	{
+		gfx::DescriptorType type;
+		size_t binding;
+		size_t size;
+	};
+
 	ShaderPermutation(Shader& in_shader, ShaderPermutationId in_id);
 
 	ShaderPermutation(const ShaderPermutation&) = delete;
@@ -49,10 +63,21 @@ public:
 		return shader_map;
 	}
 
-	[[nodiscard]] ShaderPermutationState get_state() const { return state; }
-	[[nodiscard]] gfx::PipelineLayoutHandle get_pipeline_layout() const { return pipeline_layout.get(); }
-	[[nodiscard]] bool is_compiling() const { return state == ShaderPermutationState::Compiling; }
-	[[nodiscard]] bool is_available() const { return state == ShaderPermutationState::Available; }
+	const ParameterInfo* get_parameter_info(const std::string& in_name) const
+	{
+		auto it = parameter_infos.find(in_name);
+		if (it != parameter_infos.end())
+			return &it->second;
+
+		return nullptr;
+	}
+
+	Shader& get_shader() const { return shader; }
+	ShaderPermutationState get_state() const { return state; }
+	gfx::PipelineLayoutHandle get_pipeline_layout() const { return pipeline_layout.get(); }
+	bool is_compiling() const { return state == ShaderPermutationState::Compiling; }
+	bool is_available() const { return state == ShaderPermutationState::Available; }
+	const auto& get_sets() const { return sets; }
 private:
 	Shader& shader;
 	ShaderPermutationId id;
@@ -60,6 +85,8 @@ private:
 	gfx::UniquePipelineLayout pipeline_layout;
 	ShaderMap shader_map;
 	jobsystem::Job* root_compilation_job;
+	std::vector<std::vector<ResourceInfo>> sets;
+	robin_hood::unordered_map<std::string, ParameterInfo> parameter_infos;
 };
 
 enum class ShaderOptionType
@@ -141,12 +168,70 @@ private:
 class ShaderInstance
 {
 public:
-	ShaderInstance(Shader& in_shader, ShaderPermutation& in_permutation);
+	ShaderInstance(ShaderPermutation& in_permutation);
+
+	void bind(gfx::CommandListHandle handle);
+
+	bool set_uint32_parameter(const std::string& in_name, uint32_t data)
+	{
+		if (!build_parameters_cache())
+			return false;
+
+		if(const auto* parameter_info = permutation.get_parameter_info(in_name))
+		{
+			for(const auto& ubo : ubos)
+			{
+				if(ubo.set == parameter_info->set &&
+					ubo.binding == parameter_info->binding)
+				{
+					memcpy(static_cast<uint8_t*>(ubo.mapped_data) + parameter_info->offset, &data, sizeof(uint32_t));
+				}
+			}
+		}
+
+		return false;
+	}
+
+	bool set_ubo_parameter(const std::string& in_name, gfx::BufferHandle in_buffer);
+	bool set_ssbo_parameter(const std::string& in_name, gfx::BufferHandle in_buffer);
 
 	ShaderPermutation& get_permutation() { return permutation; }
 private:
-	Shader& shader;
+	bool build_parameters_cache();
+private:
 	ShaderPermutation& permutation;
+	bool parameter_cache_built;
+
+	struct BufferParameter
+	{
+		size_t set;
+		size_t binding;
+		std::variant<gfx::UniqueBuffer, gfx::BufferHandle> buffer;
+		void* mapped_data;
+
+		BufferParameter() : set(0), binding(0), mapped_data(nullptr) {}
+		BufferParameter(const size_t in_set, const size_t in_binding, gfx::UniqueBuffer&& in_buffer, void* in_mapped_data)
+			: set(in_set), binding(in_binding), buffer(std::move(in_buffer)), mapped_data(in_mapped_data) {}
+		BufferParameter(const size_t in_set, const size_t in_binding, gfx::BufferHandle in_buffer, void* in_mapped_data)
+			: set(in_set), binding(in_binding), buffer(in_buffer), mapped_data(in_mapped_data) {}
+
+		BufferParameter(const BufferParameter&) = delete;
+		BufferParameter& operator=(const BufferParameter&) = delete;
+
+		BufferParameter(BufferParameter&&) = default;
+		BufferParameter& operator=(BufferParameter&&) = default;
+
+		~BufferParameter()
+		{
+			if(mapped_data)
+			{
+				gfx::get_device()->unmap_buffer(std::get<gfx::UniqueBuffer>(buffer).get());
+			}
+		}
+	};
+
+	std::vector<BufferParameter> ubos;
+	std::vector<BufferParameter> ssbos;
 };
 
 }

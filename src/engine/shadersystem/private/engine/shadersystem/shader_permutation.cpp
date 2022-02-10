@@ -92,12 +92,35 @@ void ShaderPermutation::compile()
 
 		if (state != ShaderPermutationState::Unavailable)
 		{
+			sets.clear();
+			auto& set = sets.emplace_back();
 			std::vector<gfx::DescriptorSetLayoutBinding> bindings;
 
 			for (auto [stage, output] : outputs)
 			{
 				for (const auto& resource : output.reflection_data.resources)
 				{
+					/** Check for matching parameter to build the parameter_infos map */
+					for(const auto& parameter : shader.get_declaration().parameters)
+					{
+						if(parameter.name == resource.name 
+							&& !parameter.is_stored_in_buffer())
+						{
+							parameter_infos.insert({ parameter.name, ParameterInfo { resource.set, resource.binding, 0 }});
+							break;
+						}
+						else if(!resource.members.empty() && parameter.is_stored_in_buffer())
+						{
+							for(const auto& member : resource.members)
+							{
+								if(member.name == parameter.name)
+								{
+									parameter_infos.insert({ parameter.name, ParameterInfo { resource.set, resource.binding, member.offset }});
+								}
+							}
+						}
+					}
+
 					gfx::DescriptorType type = gfx::DescriptorType::UniformBuffer;
 					switch(resource.type)
 					{
@@ -107,6 +130,9 @@ void ShaderPermutation::compile()
 						break;
 					case gfx::ShaderReflectionResourceType::Sampler:
 						type = gfx::DescriptorType::Sampler;
+						break;
+					case gfx::ShaderReflectionResourceType::StorageBuffer:
+						type = gfx::DescriptorType::StorageBuffer;
 						break;
 					}
 
@@ -126,6 +152,8 @@ void ShaderPermutation::compile()
 							type,
 							1,
 							gfx::ShaderStageFlags(stage));
+
+					set.emplace_back(type, resource.binding, resource.size);
 				}
 			}
 

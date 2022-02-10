@@ -1,4 +1,3 @@
-if(0)
 ze_add_module(renderer
 	public/engine/renderer/render_node.hpp
 	public/engine/renderer/world.hpp
@@ -9,4 +8,3 @@ ze_add_module(renderer
 	private/engine/renderer/world.cpp)
 target_include_directories(renderer PUBLIC public PRIVATE private)
 target_link_libraries(renderer PUBLIC core gfx)
-endif()

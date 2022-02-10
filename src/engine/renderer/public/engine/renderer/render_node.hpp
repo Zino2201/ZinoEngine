@@ -5,10 +5,10 @@
 #include "engine/gfx/device.hpp"
 #include "render_pass.hpp"
 
+namespace ze { class Material; }
+
 namespace ze::renderer
 {
-
-struct Material;
 
 /**
  * A batch of node's mesh with the same material/buffers
@@ -25,7 +25,7 @@ struct MeshBatch
 
 	uint64_t key;
 
-	Material& material;
+	Material* material;
 	gfx::BufferHandle vertex_buffer;
 
 	/** Vertex buffer used to index to the global node SSBO */
@@ -35,9 +35,11 @@ struct MeshBatch
 	std::vector<Instance> instances;
 
 	MeshBatch(uint64_t in_key,
-		Material& in_material,
+		Material* in_material,
 		gfx::BufferHandle in_vertex_buffer,
-		gfx::BufferHandle in_index_buffer) : key(in_key), material(in_material), vertex_buffer(in_vertex_buffer), index_buffer(in_index_buffer) {}
+		gfx::BufferHandle in_index_buffer) : key(in_key), material(in_material),
+		vertex_buffer(in_vertex_buffer),
+		index_buffer(in_index_buffer) {}
 };
 
 /**
@@ -82,9 +84,9 @@ struct hash<ze::renderer::RenderNode::MeshData>
 	uint64_t operator()(const ze::renderer::RenderNode::MeshData& in_mesh_data) const noexcept
 	{
 		uint64_t hash = 0;
-		ze::hash_combine(hash, in_mesh_data.vertex_buffer);
-		ze::hash_combine(hash, in_mesh_data.index_buffer);
-		ze::hash_combine(hash, in_mesh_data.material);
+		//ze::hash_combine(hash, in_mesh_data.vertex_buffer);
+		//ze::hash_combine(hash, in_mesh_data.index_buffer);
+		//ze::hash_combine(hash, in_mesh_data.material);
 		return hash;
 	}
 };

@@ -449,9 +449,11 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_compute_pipeline(c
 {
 	VkComputePipelineCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	create_info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	create_info.stage.stage = convert_shader_stage_bits(in_create_info.shader_stage.shader_stage);
 	create_info.stage.module = get_resource<VulkanShader>(in_create_info.shader_stage.shader)->shader_module;
 	create_info.stage.pName = in_create_info.shader_stage.entry_point;
+	create_info.layout = get_resource<VulkanPipelineLayout>(in_create_info.pipeline_layout)->get_pipeline_layout();
 	create_info.basePipelineHandle = VK_NULL_HANDLE;
 	create_info.basePipelineIndex = -1;
 
@@ -1145,12 +1147,13 @@ void VulkanDevice::cmd_end_render_pass(const BackendDeviceResource& in_list)
 	vkCmdEndRenderPass(get_resource<VulkanCommandList>(in_list)->get_command_buffer());
 }
 
-void VulkanDevice::cmd_bind_descriptor_sets(const BackendDeviceResource in_list, 
+void VulkanDevice::cmd_bind_descriptor_sets(const BackendDeviceResource in_list,
+	const PipelineBindPoint in_bind_point,
 	const BackendDeviceResource in_pipeline_layout, 
 	const std::span<BackendDeviceResource> in_descriptor_sets)
 {
 	vkCmdBindDescriptorSets(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
-		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		convert_pipeline_bind_point(in_bind_point),
 		get_resource<VulkanPipelineLayout>(in_pipeline_layout)->get_pipeline_layout(),
 		0,
 		static_cast<uint32_t>(in_descriptor_sets.size()),

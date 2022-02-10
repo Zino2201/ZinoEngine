@@ -193,7 +193,8 @@ public:
 		const int32_t in_vertex_offset,
 		const uint32_t in_first_instance) override;
 	void cmd_end_render_pass(const BackendDeviceResource& in_list) override;
-	void cmd_bind_descriptor_sets(const BackendDeviceResource in_list, 
+	void cmd_bind_descriptor_sets(const BackendDeviceResource in_list,
+		const PipelineBindPoint in_bind_point,
 		const BackendDeviceResource in_pipeline_layout, 
 		const std::span<BackendDeviceResource> in_descriptor_sets) override;
 	void cmd_bind_vertex_buffers(const BackendDeviceResource& in_list, 

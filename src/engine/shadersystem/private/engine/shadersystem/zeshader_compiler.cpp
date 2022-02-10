@@ -25,7 +25,7 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 	std::string* current_hlsl_stage = &declaration.common_hlsl;
 	ShaderPass* current_pass = &declaration.passes.emplace_back();
 
-	enum class BlockType { HLSL, ZESHADER_SHADER, ZESHADER_STAGE, ZESHADER_PASS };
+	enum class BlockType { HLSL, ZESHADER_SHADER, ZESHADER_STAGE, ZESHADER_PASS, ZESHADER_PARAMETERS };
 	std::stack<BlockType> blocks;
 
 	while(true)
@@ -34,7 +34,7 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 		if (stream.eof())
 			break;
 
-		if(std::isalpha(c))
+		if (std::isalpha(c))
 		{
 			std::string word;
 			do
@@ -43,76 +43,144 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 				c = static_cast<char>(stream.get());
 			} while (std::isalpha(c));
 
-			if(word == "shader" &&
-				declaration.name.empty())
+			if (!blocks.empty() && blocks.top() == BlockType::ZESHADER_PARAMETERS)
 			{
-				if(!skip_until(stream, '"'))
-					return make_error(std::string("Can't properly parse shader name. Excepted syntax: 'shader \"Name\"'"));
-
-				while (true)
+				std::string name;
+				do
 				{
-					c = stream.get();
+					if(!std::isspace(c))
+						name.push_back(c);
+					c = static_cast<char>(stream.get());
+				} while (std::isalpha(c) || c == '_');
 
-					if (c == '"')
-						break;
-					else if(c == '\n')
-						return make_error(std::string("Can't properly parse shader name. Excepted syntax: 'shader \"Name\"'"));
+				if(c != ';' && !skip_until(stream, ';'))
+					return make_error(std::string("Parameter must finish with a semi-colon."));
 
-					declaration.name.push_back(c);
-				}
+				ShaderParameterType parameter_type;
+				if (word == "uint")
+					parameter_type = ShaderParameterType::Uint;
+				else if (word == "uint64_t")
+					parameter_type = ShaderParameterType::Uint64;
+				else if (word == "float")
+					parameter_type = ShaderParameterType::Float;
+				else if (word == "float2")
+					parameter_type = ShaderParameterType::Float2;
+				else if (word == "float3")
+					parameter_type = ShaderParameterType::Float3;
+				else if (word == "float4")
+					parameter_type = ShaderParameterType::Float4;
+				else if (word == "Texture2D")
+					parameter_type = ShaderParameterType::Texture2D;
+				else if (word == "ByteAddressBuffer")
+					parameter_type = ShaderParameterType::ByteAddressBuffer;
+				else if (word == "RWByteAddressBuffer")
+					parameter_type = ShaderParameterType::RWByteAddressBuffer;
+					
 
-				if (!skip_until(stream, '{'))
-					return make_error(std::string("Shader block never opened."));
-
-				blocks.push(BlockType::ZESHADER_SHADER);
-			}
-			else if(word == "vertex")
-			{
-				if (!skip_until(stream, '{'))
-					return make_error(std::string("Vertex block never opened."));
-
-				blocks.push(BlockType::ZESHADER_STAGE);
-				auto& stage = current_pass->stages.emplace_back(gfx::ShaderStageFlagBits::Vertex);
-				current_hlsl_stage = &stage.hlsl;
-			}
-			else if (word == "fragment")
-			{
-				if (!skip_until(stream, '{'))
-					return make_error(std::string("Fragment block never opened."));
-
-				blocks.push(BlockType::ZESHADER_STAGE);
-				auto& stage = current_pass->stages.emplace_back(gfx::ShaderStageFlagBits::Fragment);
-				current_hlsl_stage = &stage.hlsl;
-			}
-			else if(word == "pass")
-			{
-				if (!skip_until(stream, '"'))
-					return make_error(std::string("Invalid pass syntax. 'pass \"Name\"'"));
-
-				current_pass = &declaration.passes.emplace_back();
-				current_hlsl_stage = &current_pass->common_hlsl;
-
-				while (true)
-				{
-					c = stream.get();
-
-					if (c == '"')
-						break;
-					else if (c == '\n')
-						return make_error(std::string("Can't properly parse pass name. Excepted syntax: 'pass \"Name\"'"));
-
-					current_pass->name.push_back(c);
-				}
-
-				if (!skip_until(stream, '{'))
-					return make_error(std::string("Pass block never opened."));
-
-				blocks.push(BlockType::ZESHADER_PASS);
+				declaration.parameters.emplace_back(parameter_type, name);
 			}
 			else
 			{
-				current_hlsl_stage->append(word);
-				current_hlsl_stage->push_back(c);
+				if (word == "shader" &&
+					declaration.name.empty())
+				{
+					if (!skip_until(stream, '"'))
+						return make_error(std::string("Can't properly parse shader name. Excepted syntax: 'shader \"Name\"'"));
+
+					while (true)
+					{
+						c = static_cast<char>(stream.get());
+
+						if (c == '"')
+							break;
+						else if (c == '\n')
+							return make_error(std::string("Can't properly parse shader name. Excepted syntax: 'shader \"Name\"'"));
+
+						declaration.name.push_back(c);
+					}
+
+					if (!skip_until(stream, '{'))
+						return make_error(std::string("Shader block never opened."));
+
+					blocks.push(BlockType::ZESHADER_SHADER);
+				}
+				else if (word == "vertex")
+				{
+					if (!skip_until(stream, '{'))
+						return make_error(std::string("Vertex block never opened."));
+
+					for (const auto& stage : current_pass->stages)
+						if (stage.stage == gfx::ShaderStageFlagBits::Compute)
+							return make_error(std::string("Only one compute block and no vertex/fragment block must be present per pass."));
+
+					blocks.push(BlockType::ZESHADER_STAGE);
+					auto& stage = current_pass->stages.emplace_back(gfx::ShaderStageFlagBits::Vertex);
+					current_hlsl_stage = &stage.hlsl;
+				}
+				else if (word == "fragment")
+				{
+					if (!skip_until(stream, '{'))
+						return make_error(std::string("Fragment block never opened."));
+
+					for (const auto& stage : current_pass->stages)
+						if (stage.stage == gfx::ShaderStageFlagBits::Compute)
+							return make_error(std::string("Only one compute block and no vertex/fragment block must be present per pass."));
+
+
+					blocks.push(BlockType::ZESHADER_STAGE);
+					auto& stage = current_pass->stages.emplace_back(gfx::ShaderStageFlagBits::Fragment);
+					current_hlsl_stage = &stage.hlsl;
+				}
+				else if (word == "compute")
+				{
+					if (!skip_until(stream, '{'))
+						return make_error(std::string("Compute block never opened."));
+
+					if (!current_pass->stages.empty())
+						return make_error(std::string("Only one compute block and no vertex/fragment block must be present per pass."));
+
+					blocks.push(BlockType::ZESHADER_STAGE);
+					auto& stage = current_pass->stages.emplace_back(gfx::ShaderStageFlagBits::Compute);
+					current_hlsl_stage = &stage.hlsl;
+					current_pass->is_compute_pass = true;
+				}
+				else if (word == "pass")
+				{
+					if (!skip_until(stream, '"'))
+						return make_error(std::string("Invalid pass syntax. 'pass \"Name\"'"));
+
+					current_pass = &declaration.passes.emplace_back();
+					current_hlsl_stage = &current_pass->common_hlsl;
+
+					while (true)
+					{
+						c = static_cast<char>(stream.get());
+
+						if (c == '"')
+							break;
+						else if (c == '\n')
+							return make_error(std::string("Can't properly parse pass name. Excepted syntax: 'pass \"Name\"'"));
+
+						current_pass->name.push_back(c);
+					}
+
+					if (!skip_until(stream, '{'))
+						return make_error(std::string("Pass block never opened."));
+
+					blocks.push(BlockType::ZESHADER_PASS);
+				}
+				else if (word == "parameters")
+				{
+					if (!skip_until(stream, '{'))
+						return make_error(std::string("Parameters block never opened."));
+
+					blocks.push(BlockType::ZESHADER_PARAMETERS);
+				}
+				else
+				{
+					current_hlsl_stage->append(word);
+					current_hlsl_stage->push_back(c);
+				}
 			}
 		}
 		else if(c == '{')
@@ -131,7 +199,7 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 			{
 				current_hlsl_stage = &declaration.passes.back().common_hlsl;
 			}
-			else
+			else if(blocks.top() != BlockType::ZESHADER_PARAMETERS)
 			{
 				current_hlsl_stage->push_back(c);
 			}

@@ -10,7 +10,7 @@ shader "Sky"
 	struct VertexOutput
 	{
 		float4 position : SV_POSITION;
-		float3 texcoord : TEXCOORD0;
+		float2 texcoord : TEXCOORD0;
 	};
 
 	cbuffer GlobalData : register(b0)
@@ -23,8 +23,9 @@ shader "Sky"
 		float3 view_pos;
 	};
 
-	TextureCube texture : register(t1);
+	Texture2D texture : register(t1);
 	SamplerState texture_sampler : register(s2);
+	ByteAddressBuffer test : register(t3);
 
 	vertex
 	{
@@ -32,9 +33,10 @@ shader "Sky"
 		{
 			VertexOutput output;
 
+			uint coucou = test.Load(0);
 			float4 world_pos = mul(float4(input.position, 1.0), world);
 	        output.position = mul(world_pos, mul(view, proj));
-	        output.texcoord = input.position;
+	        output.texcoord = input.texcoord;
 
 			return output;
 		}
@@ -44,7 +46,15 @@ shader "Sky"
 	{
 		float4 main(VertexOutput input) : SV_TARGET0
 		{
-            return texture.Sample(texture_sampler, input.texcoord);
+			const float gamma = 2.2;
+			const float exposure = 2.5;
+
+			/** Simple tonemapping */
+			float3 color = texture.Sample(texture_sampler, input.texcoord).rgb;
+			float3 mapped = 1.0 - exp(-color * exposure);
+			mapped = pow(mapped, float3(1.0 / gamma, 1.0 / gamma, 1.0 / gamma));
+			
+            return float4(mapped, 1.0); 
 		}
 	}
 }

@@ -1,17 +1,12 @@
 #pragma once
 
-#include "engine/containers/SparseArray.hpp"
-#include "RenderNode.hpp"
-#include "engine/gfx/UniformBuffer.hpp"
-#include "engine/gfx/SparseGPUArray.hpp"
 #include <boost/dynamic_bitset.hpp>
-#include "RenderPass.hpp"
-#include "Drawcall.hpp"
 #include "engine/containers/sparse_array.hpp"
 
 namespace ze::renderer
 {
 
+#if 0
 /**
  * GPU-side informatins about a render node
  */
@@ -58,5 +53,6 @@ private:
 	gfx::SparseGPUArray<RenderNodeGPUInfo> node_gpu_infos;
 	robin_hood::unordered_map<RenderPass, std::vector<Drawcall>> drawcalls;
 };
+#endif
 
 }

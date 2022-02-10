@@ -27,7 +27,15 @@ enum class ShaderReflectionResourceType
 	UniformBuffer,
 	Texture2D,
 	TextureCube,
+	StorageBuffer,
 	Sampler,
+};
+
+struct ShaderReflectionMember
+{
+	std::string name;
+	size_t size;
+	size_t offset;
 };
 
 struct ShaderReflectionResource
@@ -37,6 +45,8 @@ struct ShaderReflectionResource
 	uint32_t set;
 	uint32_t binding;
 	uint32_t count;
+	size_t size;
+	std::vector<ShaderReflectionMember> members;
 };
 
 struct ShaderReflectionData

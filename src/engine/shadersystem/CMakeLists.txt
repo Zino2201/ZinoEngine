@@ -1,6 +1,3 @@
-include(FindLua)
-find_package(Lua REQUIRED)
-find_package(sol2 CONFIG REQUIRED)
 ze_add_module(shadersystem
 	public/engine/shadersystem/shader_permutation_id.hpp
 	public/engine/shadersystem/shader_declaration.hpp
@@ -13,6 +10,5 @@ ze_add_module(shadersystem
 	private/engine/shadersystem/zeshader_compiler.hpp
 	private/engine/shadersystem/zeshader_compiler.cpp
 	private/engine/shadersystem/shader.cpp)
-target_include_directories(shadersystem PUBLIC public PRIVATE private ${LUA_INCLUDE_DIR})
-target_link_libraries(shadersystem PUBLIC core gfx jobsystem PRIVATE ${LUA_LIBRARIES} sol2::sol2 shadercompiler filesystem)
-target_compile_definitions(shadersystem PRIVATE SOL_ALL_SAFETIES_ON=1 SOL_NO_EXCEPTIONS=1)
+target_include_directories(shadersystem PUBLIC public PRIVATE private)
+target_link_libraries(shadersystem PUBLIC core gfx jobsystem PRIVATE shadercompiler filesystem)

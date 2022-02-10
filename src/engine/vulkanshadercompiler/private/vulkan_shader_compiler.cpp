@@ -72,9 +72,10 @@ public:
 
 		std::vector<LPCWSTR> args =
 		{
-			L"-Qstrip_debug",
-			L"-Qstrip_reflect", 
+			//L"-Qstrip_debug",
+			//L"-Qstrip_reflect", 
 			L"-Qstrip_rootsignature", 
+			L"-Zi", 
 			L"-spirv",
 			L"-WX", 
 			L"-Zpr",
@@ -144,11 +145,33 @@ public:
 			const auto resources = spv_compiler.get_shader_resources();
 			for(const auto& ubo : resources.uniform_buffers)
 			{
+				const auto& type = spv_compiler.get_type(ubo.base_type_id);
+
+				std::vector<ShaderReflectionMember> members;
+				for(uint32_t i = 0; i < type.member_types.size(); ++i)
+				{
+					members.push_back({
+						spv_compiler.get_member_name(ubo.base_type_id, i),
+						spv_compiler.get_declared_struct_member_size(type, i),
+						spv_compiler.type_struct_member_offset(type, i) });
+				}
+
 				output.reflection_data.resources.push_back({ spv_compiler.get_name(ubo.id),
 					ShaderReflectionResourceType::UniformBuffer,
 					spv_compiler.get_decoration(ubo.id, spv::DecorationDescriptorSet),
 					spv_compiler.get_decoration(ubo.id, spv::DecorationBinding),
-					1});
+					1,
+					spv_compiler.get_declared_struct_size(type),
+					members});
+			}
+
+			for(const auto& ssbo : resources.storage_buffers)
+			{
+				output.reflection_data.resources.push_back({ spv_compiler.get_name(ssbo.id),
+					ShaderReflectionResourceType::StorageBuffer,
+					spv_compiler.get_decoration(ssbo.id, spv::DecorationDescriptorSet),
+					spv_compiler.get_decoration(ssbo.id, spv::DecorationBinding),
+					1 });
 			}
 
 			for (const auto& tex : resources.separate_images)

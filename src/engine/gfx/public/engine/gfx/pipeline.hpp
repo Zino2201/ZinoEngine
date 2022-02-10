@@ -63,6 +63,8 @@ struct PipelineShaderStage
 	}
 };
 
+static constexpr size_t max_shader_stages = 6;
+
 enum class PipelineBindPoint
 {
 	Gfx,

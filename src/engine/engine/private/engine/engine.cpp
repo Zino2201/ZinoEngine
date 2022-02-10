@@ -15,6 +15,9 @@
 #include "engine/tinyobjloader.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#include "engine/materialsystem/material_compiler.hpp"
+#include "engine/gfx/utils/scatter_upload_buffer.hpp"
+#include "engine/gfx/utils/gfx_utils_module.hpp"
 
 namespace ze
 {
@@ -40,16 +43,45 @@ Engine::Engine() : running(true)
 	shader_manager = std::make_unique<shadersystem::ShaderManager>(*device);
 	shader_manager->add_shader_directory("assets/shaders");
 	shader_manager->set_shader_format(gfx::ShaderFormat(gfx::ShaderModel::SM6_0, backend->get_shader_language()));
+
+	auto gfx_utils_module = get_module<gfx::GfxUtilsModule>("gfxutils");
+	gfx_utils_module->initialize_shaders(*shader_manager);
 }
 
 Engine::~Engine() = default;
 
 void Engine::run()
 {
-	//auto cmd_list_test = device->allocate_cmd_list(gfx::QueueType::Compute);
-	//gfx::ScatterUploadBuffer<int> coucou;
-	//coucou.emplace(0, 20);
-	//coucou.emplace(50, 2201);
+	auto cmd_list_test = device->allocate_cmd_list(gfx::QueueType::Gfx);
+	struct Light
+	{
+		glm::vec3 color;
+		float intensity;
+	};
+	gfx::UniqueBuffer test_ssbo = gfx::UniqueBuffer(device->create_buffer(
+		gfx::BufferInfo::make_ssbo_cpu_visible(100 * sizeof(Light))).get_value());
+
+	gfx::ScatterUploadBuffer<Light> coucou(*shader_manager, 32);
+	coucou.emplace(0, Light { glm::vec3(1, 0.125, 0.125), 10.f });
+	coucou.emplace(2, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(5, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(40, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(80, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(20, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(15, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(12, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(14, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(16, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(18, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(22, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(24, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(25, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(26, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(29, Light { glm::vec3(200.f, 0, 1), 500.f });
+	coucou.emplace(28, Light { glm::vec3(200.f, 0, 1), 500.f });
+
+	coucou.upload(cmd_list_test, test_ssbo.get());
+	device->submit(cmd_list_test);
 
 	const auto platform = get_module<platform::ApplicationModule>("Application");
 	platform->get_application().set_message_handler(this);
@@ -170,7 +202,7 @@ void Engine::run()
 	{
 		tinyobj::attrib_t attrib;
 		std::vector<tinyobj::shape_t> shapes;
-		tinyobj::LoadObj(&attrib, &shapes, nullptr, nullptr, nullptr, "assets/SM_ModelZShader.obj");
+		tinyobj::LoadObj(&attrib, &shapes, nullptr, nullptr, nullptr, "assets/water.obj");
 
 
 		for(const auto& shape : shapes)
@@ -229,43 +261,30 @@ void Engine::run()
 			{ (uint8_t*)sky_positions.data(), sky_positions.size() * sizeof(vertexdata) })).get_value());
 	}
 
-	std::unique_ptr<shadersystem::ShaderInstance> shader_instance;
 	std::unique_ptr<shadersystem::ShaderInstance> sky_shader;
-	gfx::PipelineMaterialState material_state;
-	gfx::PipelineRenderPassState render_pass_state;
 	std::vector<gfx::PipelineShaderStage> shader_stages;
 	std::vector<gfx::PipelineShaderStage> sky_shader_stages;
 
 	/** Get shaders */
-	auto request_new_shader = [&](const char* pass) {
-		shader_instance = shader_manager->get_shader("Cube")->instantiate({ pass });
+	auto request_new_shader = [&](const char* pass)
+	{
 		sky_shader = shader_manager->get_shader("Sky")->instantiate({ });
-		const auto& shader_map = shader_instance->get_permutation().get_shader_map();
 		const auto& sky_shader_map = sky_shader->get_permutation().get_shader_map();
-		ZE_ASSERTF(shader_map.size() == 2, "Failed to create Cube shaders, see log. Exiting.");
 		ZE_ASSERTF(sky_shader_map.size() == 2, "Failed to create Sky shaders, see log. Exiting.");
-		auto vertex_shader = shader_map.find(gfx::ShaderStageFlagBits::Vertex);
-		auto sky_vertex_shader = sky_shader_map.find(gfx::ShaderStageFlagBits::Vertex);
-		auto fragment_shader = shader_map.find(gfx::ShaderStageFlagBits::Fragment);
-		auto sky_fragment_shader = sky_shader_map.find(gfx::ShaderStageFlagBits::Fragment);
-		shader_stages.clear();
-		sky_shader_stages.clear();
-		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Vertex, gfx::Device::get_backend_shader(*vertex_shader->second), "main");
-		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Fragment, gfx::Device::get_backend_shader(*fragment_shader->second), "main");
-		sky_shader_stages.emplace_back(gfx::ShaderStageFlagBits::Vertex, gfx::Device::get_backend_shader(*sky_vertex_shader->second), "main");
-		sky_shader_stages.emplace_back(gfx::ShaderStageFlagBits::Fragment, gfx::Device::get_backend_shader(*sky_fragment_shader->second), "main");
 	};
 
 	request_new_shader("");
 
 	/** Setup material state */
-	material_state.vertex_input.input_binding_descriptions =
+
+	gfx::PipelineVertexInputStateCreateInfo vertex_input;
+	vertex_input.input_binding_descriptions =
 	{
 		gfx::VertexInputBindingDescription(0,
 			sizeof(vertexdata),
 			gfx::VertexInputRate::Vertex)
 	};
-	material_state.vertex_input.input_attribute_descriptions =
+	vertex_input.input_attribute_descriptions =
 	{
 		gfx::VertexInputAttributeDescription(0, 0,
 			gfx::Format::R32G32B32Sfloat,
@@ -277,23 +296,11 @@ void Engine::run()
 			gfx::Format::R32G32B32Sfloat,
 			offsetof(vertexdata, normal)),
 	};
-	material_state.stages = shader_stages;
-
-	std::array test = { gfx::PipelineColorBlendAttachmentState() };
-	render_pass_state.color_blend.attachments = test;
-
-	material_state.rasterizer.cull_mode = gfx::CullMode::None;
-	render_pass_state.depth_stencil.enable_depth_test = true;
-	render_pass_state.depth_stencil.enable_depth_write = true;
-	render_pass_state.depth_stencil.depth_compare_op = gfx::CompareOp::Less;
-
-	gfx::PipelineMaterialState sky_material_state = material_state;
-	sky_material_state.stages = sky_shader_stages;
 
 	auto previous = std::chrono::high_resolution_clock::now();
 
 	int beebo_width = 0, beebo_height = 0;
-	stbi_uc* data = stbi_load("assets/SKY.jpg", &beebo_width, &beebo_height, nullptr, 4);
+	stbi_uc* data = stbi_load("assets/Bricks075B_4K_Color.jpg", &beebo_width, &beebo_height, nullptr, 4);
 	auto beebo = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
 		beebo_width,
 		beebo_height,
@@ -306,13 +313,28 @@ void Engine::run()
 		beebo.get(),
 		gfx::Format::R8G8B8A8Unorm)).get_value());
 
+	int normal_texture_width = 0, normal_texture_height = 0;
+	stbi_uc* normal_texture_data = stbi_load("assets/Bricks075B_4K_NormalDX.jpg", &normal_texture_width, &normal_texture_height, nullptr, 4);
+	auto normal_texture = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
+		normal_texture_width,
+		normal_texture_height,
+		gfx::Format::R8G8B8A8Unorm,
+		1,
+		gfx::TextureUsageFlagBits::Sampled,
+		{ normal_texture_data, normal_texture_data + normal_texture_width * normal_texture_height * 4 })).get_value());
+
+	auto normal_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
+		normal_texture.get(),
+		gfx::Format::R8G8B8A8Unorm)).get_value());
+
+
 	auto beebo_sampler = gfx::UniqueSampler(device->create_sampler(gfx::SamplerInfo()).get_value());
 
 	stbi_image_free(data);
 
 	int noise_width = 0, noise_height = 0;
-	stbi_uc* noise_data = stbi_load("assets/noise.png", &noise_width, &noise_height, nullptr, 4);
-	auto noise = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
+	stbi_uc* noise_data = stbi_load("assets/Bricks075B_4K_Roughness.jpg", &noise_width, &noise_height, nullptr, 4);
+	auto roughness_texture = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
 		noise_width,
 		noise_height,
 		gfx::Format::R8G8B8A8Unorm,
@@ -320,12 +342,27 @@ void Engine::run()
 		gfx::TextureUsageFlagBits::Sampled,
 		{ noise_data, noise_data + noise_width * noise_height * 4 })).get_value());
 
-	auto noise_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
-		noise.get(),
+	auto roughness_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
+		roughness_texture.get(),
 		gfx::Format::R8G8B8A8Unorm)).get_value());
 
 	stbi_image_free(noise_data);
 
+	stbi_uc* metallic_data = stbi_load("assets/Bricks075B_4K_AmbientOcclusion.jpg", &noise_width, &noise_height, nullptr, 4);
+	auto metallic_texture = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
+		noise_width,
+		noise_height,
+		gfx::Format::R8G8B8A8Unorm,
+		1,
+		gfx::TextureUsageFlagBits::Sampled,
+		{ metallic_data, metallic_data + noise_width * noise_height * 4 })).get_value());
+
+	auto metallic_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
+		metallic_texture.get(),
+		gfx::Format::R8G8B8A8Unorm)).get_value());
+
+
+#if 0
 	int sky_tex_width = 0, sky_tex_height = 0;
 	stbi_uc* sky_tex_front = stbi_load("assets/sky/front.jpg", &sky_tex_width, &sky_tex_height, nullptr, 4);
 	stbi_uc* sky_tex_back = stbi_load("assets/sky/back.jpg", &sky_tex_width, &sky_tex_height, nullptr, 4);
@@ -341,18 +378,23 @@ void Engine::run()
 	sky_global_data.insert(sky_global_data.end(), sky_tex_down, sky_tex_down + (sky_tex_width * sky_tex_height * 4));
 	sky_global_data.insert(sky_global_data.end(), sky_tex_front, sky_tex_front + (sky_tex_width * sky_tex_height * 4));
 	sky_global_data.insert(sky_global_data.end(), sky_tex_back, sky_tex_back + (sky_tex_width * sky_tex_height * 4));
+#endif
 
-	auto sky_tex_noise = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_cube(
-		sky_tex_width,
-		sky_tex_height,
-		gfx::Format::R8G8B8A8Unorm,
+	int sky_upgun_width = 0, sky_upgun_height = 0;
+	float* sky_upgun_data = stbi_loadf("assets/NewTextureRenderTargetCube_Tex1.HDR", &sky_upgun_width, &sky_upgun_height,
+		nullptr, STBI_rgb_alpha);
+
+	auto sky_tex_noise = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
+		sky_upgun_width,
+		sky_upgun_height,
+		gfx::Format::R32G32B32A32Sfloat,
 		1,
 		gfx::TextureUsageFlagBits::Sampled,
-		{ sky_global_data.data(), sky_global_data.data() + sky_global_data.size()})).get_value());
+		{ (uint8_t*) sky_upgun_data, (uint8_t*) sky_upgun_data + (4 * sizeof(float) * sky_upgun_width * sky_upgun_height) })).get_value());
 
-	auto sky_tex_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_cube(
+	auto sky_tex_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		sky_tex_noise.get(),
-		gfx::Format::R8G8B8A8Unorm)).get_value());
+		gfx::Format::R32G32B32A32Sfloat)).get_value());
 
 	float i = 0;
 	float time = 0.f;
@@ -366,6 +408,35 @@ void Engine::run()
 	platform->get_application().set_show_cursor(false);
 	platform->get_application().lock_cursor(main_window.get());
 	bool locked = true;
+
+	/** demo material */
+	auto& filesystem = get_module<filesystem::Module>("FileSystem")->get_filesystem();
+	auto file = filesystem.read("assets/shaders/test.zematerial");
+
+	std::unique_ptr<Material> material;
+
+	if (file)
+	{
+		auto mat_result = compile_zematerial(*shader_manager, std::move(file.get_value()));
+		if (mat_result)
+		{
+			material = std::move(mat_result.get_value());
+		}
+		else
+		{
+			logger::fatal("Material compilation error: {}", mat_result.get_error());
+		}
+	}
+
+	std::unique_ptr<shadersystem::ShaderInstance> mat_shader = material->get_shader()->instantiate({});
+	{
+		const auto& shader_map = mat_shader->get_permutation().get_shader_map();
+		ZE_CHECKF(shader_map.size() == 2, "Failed to compile shader");
+		auto vertex_shader = shader_map.find(gfx::ShaderStageFlagBits::Vertex);
+		auto fragment_shader = shader_map.find(gfx::ShaderStageFlagBits::Fragment);
+		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Vertex, gfx::Device::get_backend_shader(*vertex_shader->second), "main");
+		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Fragment, gfx::Device::get_backend_shader(*fragment_shader->second), "main");
+	}
 
 	while(running)
 	{
@@ -424,7 +495,7 @@ void Engine::run()
 
 		right = glm::normalize(glm::cross(fwd, glm::vec3(0, 0, 1)));
 
-		float cam_speed = 10.5f;
+		float cam_speed = 0.5f;
 		if (locked)
 		{
 			if (ImGui::IsKeyDown(ImGuiKey_Z))
@@ -460,7 +531,11 @@ void Engine::run()
 		u.view = view;
 		u.proj = proj;
 		u.time = time;
-		u.sun_dir = glm::vec3(-0.842051, -0.279758, 0.461180);
+		//u.sun_dir = glm::vec3(-0.901652, 0.356182, 0.245272);
+		u.sun_dir.x = 1.5f;// 1.0f + sin(time) * 5.f;
+		u.sun_dir.y = 0;//sin(time / 5.f) * 1.f;
+		u.sun_dir.z = 0;// 4.f;
+		//u.sun_dir = cam_pos;
 		u.cam_pos = cam_pos;
 		u.view_dir = fwd;
 
@@ -487,8 +562,9 @@ void Engine::run()
 			using namespace gfx;
 			const auto list = device->allocate_cmd_list(gfx::QueueType::Gfx);
 			std::array clear_values = { ClearValue(ClearColorValue({0, 0, 0, 1})),
-				ClearValue(ClearDepthStencilValue(1.f, 0)) };
-			std::array color_attachments = { get_device()->get_swapchain_backbuffer_view(swapchain.get()) };
+				ClearValue(ClearColorValue({0, 0, 0, 1})), ClearValue(ClearDepthStencilValue(1.f, 0)) };
+			std::array color_attachments = { get_device()->get_swapchain_backbuffer_view(swapchain.get()),
+				base_pass_texture_view.get() };
 			RenderPassInfo render_pass_info;
 			render_pass_info.render_area = Rect2D(0, 0,
 				static_cast<uint32_t>(main_window->get_width()), static_cast<uint32_t>(main_window->get_height()));
@@ -498,35 +574,40 @@ void Engine::run()
 			render_pass_info.store_attachment_flags = 1 << 0;
 			render_pass_info.clear_values = clear_values;
 
-			std::array color_attachments_refs = { 0Ui32 };
+			std::array color_attachments_refs = { 1Ui32 };
+			std::array resolve_attachments_refs = { 0Ui32 };
 			std::array subpasses = { RenderPassInfo::Subpass(color_attachments_refs,
 				{},
-				{},
+				resolve_attachments_refs,
 				RenderPassInfo::DepthStencilMode::ReadWrite) };
 			render_pass_info.subpasses = subpasses;
 
 
 			device->cmd_begin_render_pass(list, render_pass_info);
 
+			device->cmd_set_vertex_input_state(list, vertex_input);
+			device->cmd_set_multisampling_state(list, { SampleCountFlagBits::Count8 });
+			device->cmd_set_depth_stencil_state(list, { true, true, CompareOp::Less });
+
 			/** Sky */
 			device->cmd_bind_vertex_buffer(list, sky_vbo.get(), 0);
-			device->cmd_set_render_pass_state(list, render_pass_state);
-			device->cmd_set_material_state(list, sky_material_state);
+			sky_shader->bind(list);
 			device->cmd_bind_ubo(list, 0, 0, sky_wvp.get_handle());
 			device->cmd_bind_texture_view(list, 0, 1, sky_tex_view.get());
 			device->cmd_bind_sampler(list, 0, 2, beebo_sampler.get());
-			device->cmd_bind_pipeline_layout(list, sky_shader->get_permutation().get_pipeline_layout());
+			device->cmd_bind_ssbo(list, 0, 3, test_ssbo.get());
 			device->cmd_draw(list, sky_positions.size(), 1, 0, 0);
 
 			/** Water */
 			device->cmd_bind_vertex_buffer(list, vbo.get(), 0);
-			device->cmd_set_material_state(list, material_state);
+			mat_shader->bind(list);
 			device->cmd_bind_ubo(list, 0, 0, wvp_ubo.get_handle());
 			device->cmd_bind_texture_view(list, 0, 1, beebo_view.get());
-			device->cmd_bind_texture_view(list, 0, 3, noise_view.get());
-			device->cmd_bind_texture_view(list, 0, 4, sky_tex_view.get());
+			device->cmd_bind_texture_view(list, 0, 3, roughness_texture_view.get());
+			device->cmd_bind_texture_view(list, 0, 4, metallic_texture_view.get());
+			device->cmd_bind_texture_view(list, 0, 5, normal_texture_view.get());
+			device->cmd_bind_texture_view(list, 0, 6, sky_tex_view.get());
 			device->cmd_bind_sampler(list, 0, 2, beebo_sampler.get());
-			device->cmd_bind_pipeline_layout(list, shader_instance->get_permutation().get_pipeline_layout());
 			device->cmd_draw(list, positions.size(), 1, 0, 0);
 
 			device->cmd_end_render_pass(list);
@@ -567,11 +648,37 @@ void Engine::create_swapchain(const gfx::UniqueSwapchain& old_swapchain)
 		main_window->get_height(),
 		old_swapchain.is_valid() ? device->get_swapchain_backend_handle(old_swapchain.get()) : gfx::null_backend_resource)).get_value());
 
-	depth_buffer = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_depth_stencil_attachment(
-		main_window->get_width(), main_window->get_height(), gfx::Format::D24UnormS8Uint)).get_value());
+	depth_buffer = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo(
+		gfx::TextureCreateInfo(
+			gfx::TextureType::Tex2D,
+			gfx::MemoryUsage::GpuOnly,
+			gfx::Format::D24UnormS8Uint,
+			main_window->get_width(),
+			main_window->get_height(),
+			1,
+			1,
+			1,
+			gfx::SampleCountFlagBits::Count8,
+			gfx::TextureUsageFlagBits::DepthStencilAttachment))).get_value());
 
 	depth_buffer_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_depth(
 		depth_buffer.get(), gfx::Format::D24UnormS8Uint)).get_value());
+
+	base_pass_texture = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo(
+		gfx::TextureCreateInfo(
+			gfx::TextureType::Tex2D,
+			gfx::MemoryUsage::GpuOnly,
+			gfx::Format::B8G8R8A8Unorm,
+			main_window->get_width(),
+			main_window->get_height(),
+			1,
+			1,
+			1,
+			gfx::SampleCountFlagBits::Count8,
+			gfx::TextureUsageFlagBits::ColorAttachment))).get_value());
+
+	base_pass_texture_view = gfx::UniqueTextureView(device->create_texture_view(
+		gfx::TextureViewInfo::make_2d(base_pass_texture.get(), gfx::Format::B8G8R8A8Unorm)).get_value());
 
 	if(old_swapchain.is_valid())
 		imgui::update_main_viewport(*main_window, swapchain.get());

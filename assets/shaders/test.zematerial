@@ -1,8 +1,1 @@
-pass "base"
-{ 
-	shader "MetalPbr"
-	parameters
-	{
-		color: #200C12
-	}
-}
+shader "Water"

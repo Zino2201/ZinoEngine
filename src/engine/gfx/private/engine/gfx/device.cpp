@@ -109,99 +109,6 @@ Sampler::~Sampler()
 	device.get_backend_device()->destroy_sampler(resource);
 }
 
-/** Command List */
-
-void CommandList::reset()
-{
-	for (auto& set : descriptors)
-		for (auto& descriptor : set)
-			descriptor = Descriptor();
-}
-
-void CommandList::prepare_draw()
-{
-	if(pipeline_state_dirty)
-		update_pipeline_state();
-
-	update_descriptors();
-}
-
-void CommandList::prepare_compute()
-{
-	ZE_CHECKF(is_compute_shader, "No compute shader was bound!");
-	
-	if(pipeline_state_dirty)
-		update_pipeline_state();
-
-	update_descriptors();
-}
-
-void CommandList::update_pipeline_state()
-{
-	ZE_CHECKF(pipeline_layout, "No pipeline layout was bound!");
-
-	if (is_compute_shader)
-	{
-		ComputePipelineCreateInfo create_info(compute_shader,
-			Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource());
-
-		auto pipeline = device.get_or_create_compute_pipeline(create_info);
-		device.get_backend_device()->cmd_bind_pipeline(
-			resource,
-			PipelineBindPoint::Compute,
-			pipeline);
-	}
-	else
-	{
-		GfxPipelineCreateInfo create_info(material_state.stages,
-			material_state.vertex_input,
-			material_state.input_assembly,
-			material_state.rasterizer,
-			render_pass_state.multisampling,
-			render_pass_state.depth_stencil,
-			render_pass_state.color_blend,
-			Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource(),
-			render_pass,
-			0);
-
-		ZE_CHECKF(render_pass, "No render pass set!");
-
-		auto pipeline = device.get_or_create_gfx_pipeline(create_info);
-
-		device.get_backend_device()->cmd_bind_pipeline(
-			resource,
-			PipelineBindPoint::Gfx,
-			pipeline);
-	}
-	
-	pipeline_state_dirty = false;	
-}
-
-void CommandList::update_descriptors()
-{
-	if(dirty_sets_mask == 0)
-		return;
-
-	auto layout = Device::cast_handle<PipelineLayout>(pipeline_layout);
-
-	std::vector<BackendDeviceResource> sets;
-	sets.reserve(max_descriptor_sets);
-	for(uint32_t i = 0; i < max_descriptor_sets; ++i)
-	{
-		if(dirty_sets_mask & (1 << i))
-		{
-			auto result = device.get_backend_device()->allocate_descriptor_set(layout->get_resource(),
-				i,
-				descriptors[i]);
-			sets.emplace_back(result.get_value());
-		}
-	}
-
-	device.get_backend_device()->cmd_bind_descriptor_sets(resource,
-		layout->get_resource(),
-		sets);
-}
-
 /** Device */
 
 Device::Device(Backend& in_backend, 
@@ -659,8 +566,11 @@ CommandListHandle Device::allocate_cmd_list(const QueueType& in_type)
 	case QueueType::Gfx:
 		list = get_current_frame().gfx_command_pool.allocate_cmd_list();
 		break;
+	case QueueType::Compute:
+		list = get_current_frame().compute_command_pool.allocate_cmd_list();
+		break;
 	default:
-		ZE_ASSERT(false);
+		ZE_UNREACHABLE();
 		break;
 	}
 
@@ -733,10 +643,6 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 		{
 			if (desc.load_op == AttachmentLoadOp::Load)
 				desc.initial_layout = TextureLayout::Present;
-		}
-		else
-		{
-			desc.initial_layout = view->get_texture().get_layout(TextureLayout::ColorAttachment);
 		}
 
 		if(view->get_texture().is_texture_from_swapchain())
@@ -866,7 +772,7 @@ void Device::cmd_dispatch(const CommandListHandle& in_list,
 	const uint32_t in_z)
 {
 	auto list = cast_handle<CommandList>(in_list);
-	list->prepare_compute();
+	list->prepare_draw();
 
 	backend_device->cmd_dispatch(list->get_resource(),
 		in_x,
@@ -874,18 +780,39 @@ void Device::cmd_dispatch(const CommandListHandle& in_list,
 		in_z);
 }
 
-void Device::cmd_set_render_pass_state(const CommandListHandle& in_cmd_list, 
-	const PipelineRenderPassState& in_state)
+void Device::cmd_set_depth_stencil_state(const CommandListHandle& in_cmd_list, const PipelineDepthStencilStateCreateInfo& in_state)
 {
-	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_render_pass_state(in_state);
+	cast_handle<CommandList>(in_cmd_list)->set_depth_stencil_state(in_state);
 }
 
-void Device::cmd_set_material_state(const CommandListHandle& in_cmd_list, 
-	const PipelineMaterialState& in_state)
+void Device::cmd_set_multisampling_state(const CommandListHandle& in_cmd_list, const PipelineMultisamplingStateCreateInfo& in_info)
 {
-	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_material_state(in_state);
+	cast_handle<CommandList>(in_cmd_list)->set_multisampling_state(in_info);
+}
+
+void Device::cmd_set_color_blend_state(const CommandListHandle& in_cmd_list, const PipelineColorBlendStateCreateInfo& in_info)
+{
+	cast_handle<CommandList>(in_cmd_list)->set_color_blend_state(in_info);
+}
+
+void Device::cmd_set_vertex_input_state(const CommandListHandle& in_cmd_list, const PipelineVertexInputStateCreateInfo& in_info)
+{
+	cast_handle<CommandList>(in_cmd_list)->set_vertex_input_state(in_info);
+}
+
+void Device::cmd_set_input_assembly_state(const CommandListHandle& in_cmd_list, const PipelineInputAssemblyStateCreateInfo& in_info)
+{
+	cast_handle<CommandList>(in_cmd_list)->set_input_assembly_state(in_info);
+}
+
+void Device::cmd_set_rasterization_state(const CommandListHandle& in_cmd_list, const PipelineRasterizationStateCreateInfo& in_info)
+{
+	cast_handle<CommandList>(in_cmd_list)->set_rasterization_state(in_info);
+}
+
+void Device::cmd_bind_shader(const CommandListHandle& in_cmd_list, const PipelineShaderStage& in_stage)
+{
+	cast_handle<CommandList>(in_cmd_list)->bind_shader(in_stage);
 }
 
 void Device::cmd_set_scissor(const CommandListHandle& in_cmd_list, const Rect2D& in_scissor)
@@ -902,13 +829,6 @@ void Device::cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list,
 	list->set_pipeline_layout(in_handle);
 }
 
-void Device::cmd_bind_compute_shader(const CommandListHandle& in_cmd_list,
-	const PipelineShaderStage& in_shader)
-{
-	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_compute_shader(in_shader);
-}
-
 void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list, 
 	const uint32_t in_set, 
 	const uint32_t in_binding, 
@@ -916,6 +836,17 @@ void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list,
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_buffer_info(DescriptorType::UniformBuffer,
+		in_binding,
+		in_handle ? cast_handle<Buffer>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
+}
+
+void Device::cmd_bind_ssbo(const CommandListHandle& in_cmd_list,
+	const uint32_t in_set,
+	const uint32_t in_binding,
+	const BufferHandle& in_handle)
+{
+	auto list = cast_handle<CommandList>(in_cmd_list);
+	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_buffer_info(DescriptorType::StorageBuffer,
 		in_binding,
 		in_handle ? cast_handle<Buffer>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
 }

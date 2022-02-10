@@ -75,7 +75,7 @@ shader "Cube"
 			float3 I = normalize(input.world_pos - view_pos);
 			I.y = 1;
 			float3 R = reflect(I, input.world_normal);
-			diffuse = lerp(diffuse, sky_texture.Sample(texture_sampler, R).rgb, 0.9);
+			diffuse = lerp(diffuse, sky_texture.Sample(texture_sampler, R).rgb, 0.25);
 
             return float4(diffuse + specular, 1.0);
 		}

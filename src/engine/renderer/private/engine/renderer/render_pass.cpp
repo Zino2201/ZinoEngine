@@ -4,6 +4,8 @@
 namespace ze::renderer
 {
 
+#if 0
+
 RenderPass::RenderPass(World& in_world) : world(in_world) {}
 
 void RenderPass::rebuild()
@@ -30,5 +32,7 @@ void RenderPass::rebuild()
 		}
 	}
 }
+
+#endif
 
 }

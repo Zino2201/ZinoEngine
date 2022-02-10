@@ -4,24 +4,18 @@
 #include "engine/shadersystem/shader.hpp"
 #include <robin_hood.h>
 
-namespace ze::materialsystem
+namespace ze
 {
-
-struct MaterialPass
-{
-	std::string pass;
-	std::unique_ptr<shadersystem::ShaderInstance> shader;
-};
 
 class Material
 {
 public:
-	Material(shadersystem::ShaderManager& in_shader_manager);
+	Material(shadersystem::Shader* in_shader_permutation);
 
-	[[nodiscard]] const MaterialPass* get_pass(const std::string& in_name) const;
+	[[nodiscard]] shadersystem::Shader* get_shader() const { return shader; }
 private:
-	shadersystem::ShaderManager& shader_manager;
-	std::vector<std::unique_ptr<MaterialPass>> passes;
+	shadersystem::Shader* shader;
+	//gfx::PipelineMaterialState material_state;
 };
 
 }

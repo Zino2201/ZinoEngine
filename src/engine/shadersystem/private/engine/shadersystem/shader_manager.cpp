@@ -28,7 +28,8 @@ void ShaderManager::scan_directory(const std::string& in_directory)
 		{
 			if (in_path.extension() == ".zeshader")
 				build_shader(in_directory / in_path);
-		}))
+		},
+		filesystem::IterateDirectoryFlagBits::Recursive))
 	{
 		logger::error("Failed to scan directory {} for shaders", in_directory);
 	}

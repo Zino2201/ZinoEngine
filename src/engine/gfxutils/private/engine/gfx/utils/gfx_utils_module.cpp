@@ -8,6 +8,9 @@ GfxUtilsModule::GfxUtilsModule() : scatter_upload_shader(nullptr) {}
 void GfxUtilsModule::initialize_shaders(shadersystem::ShaderManager& in_shader_system)
 {
 	scatter_upload_shader = in_shader_system.get_shader("ScatterUpload");
+	ZE_ASSERTF(scatter_upload_shader,
+		"Scatter upload shader unavailable! Can't resume.");
+
 	const auto scatter_upload_shader_permutation = scatter_upload_shader->get_permutation({});
 	scatter_upload_shader_permutation->compile();
 

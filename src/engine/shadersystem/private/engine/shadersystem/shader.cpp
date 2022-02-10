@@ -59,7 +59,7 @@ Shader::Shader(ShaderManager& in_shader_manager, const ShaderDeclaration& in_dec
 std::unique_ptr<ShaderInstance> Shader::instantiate(ShaderPermutationId in_id)
 {
 	if (ShaderPermutation* permutation = get_permutation(in_id))
-		return std::make_unique<ShaderInstance>(*this, *permutation);
+		return std::make_unique<ShaderInstance>(*permutation);
 
 	return nullptr;
 }

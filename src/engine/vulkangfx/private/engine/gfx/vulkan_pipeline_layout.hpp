@@ -48,6 +48,8 @@ inline VkDescriptorType convert_descriptor_type(const DescriptorType& in_type)
 		return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 	case DescriptorType::Sampler:
 		return VK_DESCRIPTOR_TYPE_SAMPLER;
+	case DescriptorType::StorageBuffer:
+		return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	case DescriptorType::StorageTexture:
 		return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	case DescriptorType::SampledTexture:
