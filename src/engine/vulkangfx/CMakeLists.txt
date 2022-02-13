@@ -16,8 +16,8 @@ ze_add_module(vulkangfx
 	private/engine/gfx/vulkan_pipeline_layout.hpp
 	private/engine/gfx/vulkan_renderpass.hpp
 	private/engine/gfx/vulkan_command_pool.hpp
-	private/engine/gfx/vulkan_descriptor_set.cpp
-	private/engine/gfx/vulkan_descriptor_set.hpp
+	private/engine/gfx/vulkan_descriptor_manager.cpp
+	private/engine/gfx/vulkan_descriptor_manager.hpp
 	private/engine/gfx/vulkan_command_list.hpp
 	private/engine/gfx/vulkan_texture_view.hpp
 	private/engine/gfx/vulkan_sync.hpp

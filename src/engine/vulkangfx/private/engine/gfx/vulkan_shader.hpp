@@ -49,6 +49,9 @@ inline VkShaderStageFlags convert_shader_stage_flags(ShaderStageFlags in_flags)
 {
 	VkShaderStageFlags flags = 0;
 
+	if (in_flags == ShaderStageFlagBits::All)
+		return VK_SHADER_STAGE_ALL;
+
 	if(in_flags & ShaderStageFlagBits::Vertex)
 		flags |= VK_SHADER_STAGE_VERTEX_BIT;
 	

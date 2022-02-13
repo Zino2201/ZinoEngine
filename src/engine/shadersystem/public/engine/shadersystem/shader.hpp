@@ -33,16 +33,9 @@ class ShaderPermutation
 public:
 	struct ParameterInfo
 	{
-		uint32_t set;
-		uint32_t binding;
 		size_t offset;
-	};
-
-	struct ResourceInfo
-	{
-		gfx::DescriptorType type;
-		size_t binding;
 		size_t size;
+		bool is_uav;
 	};
 
 	ShaderPermutation(Shader& in_shader, ShaderPermutationId in_id);
@@ -77,7 +70,8 @@ public:
 	gfx::PipelineLayoutHandle get_pipeline_layout() const { return pipeline_layout.get(); }
 	bool is_compiling() const { return state == ShaderPermutationState::Compiling; }
 	bool is_available() const { return state == ShaderPermutationState::Available; }
-	const auto& get_sets() const { return sets; }
+	const auto get_shader_stage_flags() const { return shader_stage_flags; }
+	const auto get_parameters_size() const { return parameters_size; }
 private:
 	Shader& shader;
 	ShaderPermutationId id;
@@ -85,8 +79,9 @@ private:
 	gfx::UniquePipelineLayout pipeline_layout;
 	ShaderMap shader_map;
 	jobsystem::Job* root_compilation_job;
-	std::vector<std::vector<ResourceInfo>> sets;
 	robin_hood::unordered_map<std::string, ParameterInfo> parameter_infos;
+	gfx::ShaderStageFlags shader_stage_flags;
+	size_t parameters_size;
 };
 
 enum class ShaderOptionType
@@ -172,66 +167,29 @@ public:
 
 	void bind(gfx::CommandListHandle handle);
 
-	bool set_uint32_parameter(const std::string& in_name, uint32_t data)
-	{
-		if (!build_parameters_cache())
-			return false;
+	bool set_parameter(const std::string& in_name, gfx::BufferHandle in_buffer);
+	bool set_parameter(const std::string& in_name, gfx::TextureViewHandle in_buffer);
+	bool set_parameter(const std::string& in_name, gfx::SamplerHandle in_buffer);
 
-		if(const auto* parameter_info = permutation.get_parameter_info(in_name))
+	template<typename T>
+		requires std::is_standard_layout_v<T>
+	bool set_parameter(const std::string& in_name, T in_value)
+	{
+		if (const auto* parameter_info = permutation.get_parameter_info(in_name))
 		{
-			for(const auto& ubo : ubos)
-			{
-				if(ubo.set == parameter_info->set &&
-					ubo.binding == parameter_info->binding)
-				{
-					memcpy(static_cast<uint8_t*>(ubo.mapped_data) + parameter_info->offset, &data, sizeof(uint32_t));
-				}
-			}
+			memcpy(push_constant_data.data() + parameter_info->offset, &in_value, sizeof(T));
+			return true;
 		}
 
 		return false;
 	}
-
-	bool set_ubo_parameter(const std::string& in_name, gfx::BufferHandle in_buffer);
-	bool set_ssbo_parameter(const std::string& in_name, gfx::BufferHandle in_buffer);
 
 	ShaderPermutation& get_permutation() { return permutation; }
 private:
 	bool build_parameters_cache();
 private:
 	ShaderPermutation& permutation;
-	bool parameter_cache_built;
-
-	struct BufferParameter
-	{
-		size_t set;
-		size_t binding;
-		std::variant<gfx::UniqueBuffer, gfx::BufferHandle> buffer;
-		void* mapped_data;
-
-		BufferParameter() : set(0), binding(0), mapped_data(nullptr) {}
-		BufferParameter(const size_t in_set, const size_t in_binding, gfx::UniqueBuffer&& in_buffer, void* in_mapped_data)
-			: set(in_set), binding(in_binding), buffer(std::move(in_buffer)), mapped_data(in_mapped_data) {}
-		BufferParameter(const size_t in_set, const size_t in_binding, gfx::BufferHandle in_buffer, void* in_mapped_data)
-			: set(in_set), binding(in_binding), buffer(in_buffer), mapped_data(in_mapped_data) {}
-
-		BufferParameter(const BufferParameter&) = delete;
-		BufferParameter& operator=(const BufferParameter&) = delete;
-
-		BufferParameter(BufferParameter&&) = default;
-		BufferParameter& operator=(BufferParameter&&) = default;
-
-		~BufferParameter()
-		{
-			if(mapped_data)
-			{
-				gfx::get_device()->unmap_buffer(std::get<gfx::UniqueBuffer>(buffer).get());
-			}
-		}
-	};
-
-	std::vector<BufferParameter> ubos;
-	std::vector<BufferParameter> ssbos;
+	std::array<uint8_t, gfx::max_push_constant_size> push_constant_data;
 };
 
 }

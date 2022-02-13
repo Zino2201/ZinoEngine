@@ -62,13 +62,12 @@ public:
 			{
 				if (const auto instance = shader_manager.get_shader("ScatterUpload")->instantiate({}))
 				{
-					instance->set_uint32_parameter("element_count", element_count);
-					instance->set_uint32_parameter("data_size", static_cast<uint32_t>(sizeof(T)));
-					instance->set_uint32_parameter("threads_per_element", static_cast<uint32_t>(threads_per_element));
-					instance->set_ssbo_parameter("upload_buffer", upload_buffer.get());
-					instance->set_ssbo_parameter("dst_buffer", in_destination);
-
-					instance->set_uint32_parameter("offset", static_cast<uint32_t>(i * 64));
+					instance->set_parameter("offset", static_cast<uint32_t>(i * 64));
+					instance->set_parameter("element_count", element_count);
+					instance->set_parameter("data_size", static_cast<uint32_t>(sizeof(T)));
+					instance->set_parameter("threads_per_element", static_cast<uint32_t>(threads_per_element));
+					instance->set_parameter("upload_buffer", upload_buffer.get());
+					instance->set_parameter("dst_buffer", in_destination);
 					instance->bind(in_list);
 					get_device()->cmd_dispatch(in_list, 1, 1, 1);
 				}

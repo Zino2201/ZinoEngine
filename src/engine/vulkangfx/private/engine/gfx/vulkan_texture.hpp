@@ -9,9 +9,10 @@ namespace ze::gfx
 class VulkanTexture final
 {
 public:
-	VulkanTexture(VulkanDevice& in_device, 
+	VulkanTexture(VulkanDevice& in_device,
 		VkImage in_image,
-		VmaAllocation in_allocation) : device(in_device), image(in_image), allocation(in_allocation) {}
+		VmaAllocation in_allocation,
+		VkImageUsageFlags in_flags) : device(in_device), image(in_image), allocation(in_allocation), image_usage_flags(in_flags) {}
 
 	VulkanTexture(VulkanDevice& in_device, 
 		VkImage in_image) : device(in_device), image(in_image), allocation(nullptr) {}
@@ -27,10 +28,12 @@ public:
 	[[nodiscard]] VulkanDevice& get_device() const { return device; }
 	[[nodiscard]] VkImage get_texture() const { return image; }
 	[[nodiscard]] VmaAllocation get_allocation() const { return allocation; }
+	[[nodiscard]] VkImageUsageFlags get_image_usage_flags() const { return image_usage_flags; }
 private:
 	VulkanDevice& device;
 	VkImage image;
 	VmaAllocation allocation;
+	VkImageUsageFlags image_usage_flags;
 };
 
 inline VkSampleCountFlagBits convert_sample_count_bit(const SampleCountFlagBits& in_bit)

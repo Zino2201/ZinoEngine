@@ -3,10 +3,11 @@
 #include <boost/dynamic_bitset.hpp>
 #include "engine/containers/sparse_array.hpp"
 
+#if 0
+
 namespace ze::renderer
 {
 
-#if 0
 /**
  * GPU-side informatins about a render node
  */
@@ -50,9 +51,12 @@ private:
 	SparseArray<MeshBatch> batches;
 	std::vector<size_t> dirty_nodes;
 	std::vector<size_t> dirty_batches;
+
 	gfx::SparseGPUArray<RenderNodeGPUInfo> node_gpu_infos;
 	robin_hood::unordered_map<RenderPass, std::vector<Drawcall>> drawcalls;
 };
-#endif
+
 
 }
+
+#endif

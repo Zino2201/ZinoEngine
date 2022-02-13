@@ -1,5 +1,14 @@
 shader "Sky"
 {
+	parameters
+	{
+		float4x4 wvp;
+		uint texture;
+		uint texture_sampler;
+	}
+
+	#include "core.hlsl"
+
 	struct VertexInput
 	{
 		float3 position : POSITION;
@@ -13,19 +22,14 @@ shader "Sky"
 		float2 texcoord : TEXCOORD0;
 	};
 
-	cbuffer GlobalData : register(b0)
-	{
-		float4x4 world;
-		float4x4 view;
-		float4x4 proj;
-		float time;
-		float3 light_pos;
-		float3 view_pos;
-	};
+	struct ShaderData
+    {
+		float4x4 wvp;
+        uint texture;
+        uint texture_sampler;
+    };
 
-	Texture2D texture : register(t1);
-	SamplerState texture_sampler : register(s2);
-	ByteAddressBuffer test : register(t3);
+    ZE_PUSH_CONSTANT ShaderData data;
 
 	vertex
 	{
@@ -33,9 +37,7 @@ shader "Sky"
 		{
 			VertexOutput output;
 
-			uint coucou = test.Load(0);
-			float4 world_pos = mul(float4(input.position, 1.0), world);
-	        output.position = mul(world_pos, mul(view, proj));
+	        output.position = mul(float4(input.position, 1.0), data.wvp);
 	        output.texcoord = input.texcoord;
 
 			return output;
@@ -48,6 +50,9 @@ shader "Sky"
 		{
 			const float gamma = 2.2;
 			const float exposure = 2.5;
+
+			Texture2D texture = get_resource<Texture2D>(data.texture);
+			SamplerState texture_sampler = get_resource<SamplerState>(data.texture_sampler);
 
 			/** Simple tonemapping */
 			float3 color = texture.Sample(texture_sampler, input.texcoord).rgb;

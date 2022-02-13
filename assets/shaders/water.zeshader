@@ -1,5 +1,12 @@
 shader "Water"
 {
+	parameters
+	{
+		uint global_data;
+	}
+
+	#include "core.hlsl"
+
 	struct VertexInput
 	{
 		float3 position : POSITION;
@@ -16,24 +23,30 @@ shader "Water"
 		float3 world_normal : TEXCOORD3;
 	};
 
-	cbuffer GlobalData : register(b0)
+	struct GlobalData
 	{
 		float4x4 world;
 		float4x4 view;
 		float4x4 proj;
-		float time;
 		float3 sun_dir;
-		float3 view_pos;
 		float _pad01;
+		float3 view_pos;
+		float _pad02;
 		float3 view_dir;
+		float _pad03;
+		uint texture;
+		uint sampler;
+		uint roughness;
+		uint metallic;
+		uint normal;
 	};
 
-	Texture2D texture : register(t1);
-	SamplerState texture_sampler : register(s2);
-	Texture2D roughness_texture : register(t3);
-	Texture2D metallic_texture : register(t4);
-	Texture2D normal_texture : register(t5);
-	TextureCube sky_texture : register(t6);
+	struct ShaderData
+    {
+		uint global_data;
+    };
+
+    ZE_PUSH_CONSTANT ShaderData data;
 
 	struct Surface
 	{
@@ -48,6 +61,14 @@ shader "Water"
 	Surface get_surface(VertexOutput input)
 	{
 		Surface surface;
+
+		GlobalData global_data = get_struct<GlobalData>(data.global_data);
+
+		Texture2D texture = get_resource<Texture2D>(global_data.texture);
+		Texture2D roughness_texture = get_resource<Texture2D>(global_data.roughness);
+		Texture2D normal_texture = get_resource<Texture2D>(global_data.normal);
+		Texture2D metallic_texture = get_resource<Texture2D>(global_data.metallic);
+		SamplerState texture_sampler = get_resource<SamplerState>(global_data.sampler);
 
 		input.texcoord.y = 1.0 - input.texcoord.y;
 		surface.base_color = texture.Sample(texture_sampler, input.texcoord).rgb;
@@ -78,13 +99,15 @@ shader "Water"
 		{
 			VertexOutput output;
 
-			float4 world_pos = mul(float4(input.position, 1.0), world);
+			GlobalData global_data = get_struct<GlobalData>(data.global_data);
 
-	        output.position = mul(world_pos, mul(view, proj));
+			float4 world_pos = mul(float4(input.position, 1.0), global_data.world);
+
+	        output.position = mul(world_pos, mul(global_data.view, global_data.proj));
 	        output.texcoord = input.texcoord;
             output.normal = input.normal;
             output.world_pos = world_pos.xyz;
-            output.world_normal = mul(float4(input.normal, 1.0), world).xyz;
+            output.world_normal = mul(float4(input.normal, 1.0), global_data.world).xyz;
 
 			return output;
 		}
@@ -136,15 +159,17 @@ shader "Water"
 		float4 main(VertexOutput input) : SV_TARGET0
 		{
 			Surface surface = get_surface(input);
+			GlobalData global_data = get_struct<GlobalData>(data.global_data);
+
 			float3 N = normalize(surface.normal);
-			float3 V = normalize(view_pos - input.world_pos);
+			float3 V = normalize(global_data.view_pos - input.world_pos);
 
 			float3 f0 = float3(0.04, 0.04, 0.04);
 			f0 = lerp(f0, surface.base_color, surface.metallic);
 
 			float3 lo = 0.0;
 
-			const float3 light_pos = sun_dir;
+			const float3 light_pos = global_data.sun_dir;
 
 			/** Light */
 			{

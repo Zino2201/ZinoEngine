@@ -221,7 +221,7 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 
 		auto view_result = get_device()->create_texture_view(TextureViewInfo::make_2d(
 			font_texture,
-			Format::R8G8B8A8Srgb));
+			Format::R8G8B8A8Srgb).set_debug_name("ImGui Texture View"));
 		ZE_ASSERTF(view_result.has_value(), "Failed to create ImGui font texture view: {}", std::to_string(view_result.get_error()));
 		font_texture_view = view_result.get_value();
 	}
@@ -392,11 +392,13 @@ void draw_viewport(ImGuiViewport* viewport)
 		get_device()->unmap_buffer(*vp_draw_data.index_buffer);
 
 		/** Global data */
-		ViewportDrawData::GlobalData global_data;
-		global_data.scale = { 2.f / draw_data->DisplaySize.x, 2.f / draw_data->DisplaySize.y };
-		global_data.translate.x = -1.f - draw_data->DisplayPos.x * global_data.scale.x;
-		global_data.translate.y = -1.f - draw_data->DisplayPos.y * global_data.scale.y;
-		vp_draw_data.global_data.update(global_data);
+		const glm::vec2 scale = { 2.f / draw_data->DisplaySize.x, 2.f / draw_data->DisplaySize.y };
+		shader_instance->set_parameter("translate", glm::vec2 
+			{
+				-1.f - draw_data->DisplayPos.x * scale.x,
+				-1.f - draw_data->DisplayPos.y * scale.y
+			});
+		shader_instance->set_parameter("scale", scale);
 	};
 
 	update_viewport_buffers(viewport->DrawData, renderer_data->draw_data);
@@ -435,8 +437,7 @@ void draw_viewport(ImGuiViewport* viewport)
 		LogicOp::NoOp,
 		color_blend_states });
 
-	get_device()->cmd_bind_ubo(list, 0, 0, renderer_data->draw_data.global_data.get_handle());
-	get_device()->cmd_bind_sampler(list, 0, 1, sampler);
+	shader_instance->set_parameter("sampler", sampler);
 
 	const ImDrawData* draw_data = viewport->DrawData;
 
@@ -471,8 +472,9 @@ void draw_viewport(ImGuiViewport* viewport)
 					static_cast<uint32_t>(clip_rect.w - clip_rect.y)));
 
 				if (!cmd.TextureId)
-					get_device()->cmd_bind_texture_view(list, 0, 2, font_texture_view);
+					shader_instance->set_parameter("texture", font_texture_view);
 
+				shader_instance->bind(list);
 				get_device()->cmd_draw_indexed(list,
 					cmd.ElemCount,
 					1,

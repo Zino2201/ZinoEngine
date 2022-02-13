@@ -17,7 +17,7 @@ WindowsApplication::WindowsApplication(
 {
 	windows_platform_application = this;
 
-	::CoInitialize(nullptr);
+	::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 	timeBeginPeriod(1);
 	register_win_class();
 	update_monitors();
@@ -168,7 +168,7 @@ LRESULT WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, 
 		case WM_SYSKEYDOWN:
 		case WM_KEYDOWN:
 		{
-			const int32_t key_code = in_wparam;
+			const int32_t key_code = static_cast<int32_t>(in_wparam);
 			const bool is_repeat = (in_lparam & 0x40000000) != 0;
 			const uint32_t character_code = ::MapVirtualKeyW(key_code, MAPVK_VK_TO_CHAR);
 			message_handler->on_key_down(convert_win_character_code(key_code), character_code, is_repeat);

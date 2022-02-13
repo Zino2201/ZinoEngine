@@ -38,6 +38,8 @@ enum class ShaderStageFlagBits
 	Geometry = 1 << 3,
 	Fragment = 1 << 4,
 	Compute = 1 << 5,
+
+	All = Vertex | TessellationControl | TessellationEvaluation | Geometry | Fragment | Compute
 };
 ZE_ENABLE_FLAG_ENUMS(ShaderStageFlagBits, ShaderStageFlags);
 	

@@ -1,10 +1,10 @@
 #include "engine/renderer/render_pass.hpp"
 #include "engine/renderer/world.hpp"
 
+#if 0
 namespace ze::renderer
 {
 
-#if 0
 
 RenderPass::RenderPass(World& in_world) : world(in_world) {}
 
@@ -33,6 +33,7 @@ void RenderPass::rebuild()
 	}
 }
 
-#endif
 
 }
+
+#endif

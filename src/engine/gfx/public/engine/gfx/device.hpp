@@ -43,8 +43,10 @@ class BackendResourceWrapper
 public:
 	BackendResourceWrapper(Device& in_device,
 		const BackendDeviceResource& in_resource,
-		const std::string_view& in_debug_name) : device(in_device),
-		resource(in_resource)
+		const std::string_view& in_debug_name,
+		const uint32_t in_srv_index = -1,
+		const uint32_t in_uav_index = -1) : device(in_device),
+		resource(in_resource), srv_index(in_srv_index), uav_index(in_uav_index)
 	{
 #if ZE_BUILD(IS_DEBUG)
 		debug_name = in_debug_name;
@@ -68,9 +70,13 @@ public:
 	}
 
 	[[nodiscard]] BackendDeviceResource get_resource() const { return resource; }
+	[[nodiscard]] uint32_t get_srv_index() const { return srv_index; }
+	[[nodiscard]] uint32_t get_uav_index() const { return uav_index; }
 protected:
 	Device& device;
 	BackendDeviceResource resource;
+	uint32_t srv_index;
+	uint32_t uav_index;
 #if ZE_BUILD(IS_DEBUG)
 	std::string debug_name;
 #endif
@@ -81,7 +87,9 @@ class Buffer : public BackendResourceWrapper<DeviceResourceType::Buffer>
 public:
 	Buffer(Device& in_device,
 		const BackendDeviceResource& in_buffer,
-		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_buffer, in_debug_name) {}
+		const std::string_view& in_debug_name,
+		uint32_t in_srv_index,
+		uint32_t in_uav_index) : BackendResourceWrapper(in_device, in_buffer, in_debug_name, in_srv_index, in_uav_index) {}
 	~Buffer();
 };
 
@@ -112,7 +120,9 @@ public:
 		Texture& in_texture,
 		const TextureViewCreateInfo& in_create_info,
 		const BackendDeviceResource& in_texture_view,
-		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_texture_view, in_debug_name), texture(in_texture),
+		const std::string_view& in_debug_name,
+		uint32_t in_srv_index,
+		uint32_t in_uav_index) : BackendResourceWrapper(in_device, in_texture_view, in_debug_name, in_srv_index, in_uav_index), texture(in_texture),
 		create_info(in_create_info), is_view_from_swapchain(in_texture.is_texture_from_swapchain()) {}
 	~TextureView();
 
@@ -186,7 +196,6 @@ public:
 	void prepare_draw();
 	void set_render_pass(const BackendDeviceResource& in_handle);
 	void set_pipeline_layout(const PipelineLayoutHandle& in_handle);
-	void set_descriptor(uint32_t in_set, uint32_t in_binding, const Descriptor& in_descriptor);
 	void set_depth_stencil_state(const PipelineDepthStencilStateCreateInfo& in_state);
 	void set_multisampling_state(const PipelineMultisamplingStateCreateInfo& in_info);
 	void set_color_blend_state(const PipelineColorBlendStateCreateInfo& in_info);
@@ -194,6 +203,10 @@ public:
 	void set_input_assembly_state(const PipelineInputAssemblyStateCreateInfo& in_info);
 	void set_rasterization_state(const PipelineRasterizationStateCreateInfo& in_info);
 	void bind_shader(const PipelineShaderStage& in_stage);
+	void push_constants(const ShaderStageFlags in_shader_stage_flags,
+		const uint32_t in_offset,
+		const uint32_t in_size,
+		const void* in_data);
 
 	[[nodiscard]] QueueType get_queue_type() const { return type; }
 private:
@@ -214,11 +227,6 @@ private:
 	PipelineRasterizationStateCreateInfo rasterizer_state;
 	bool pipeline_state_dirty;
 	bool has_compute_stage;
-	std::array<std::array<Descriptor, max_bindings>, max_descriptor_sets> descriptors;
-	std::vector<BackendDeviceResource> bound_descriptor_sets;
-
-	/** Bitmask used to keep track of which descriptor sets to update */
-	uint32_t dirty_sets_mask;
 };
 
 class Fence : public BackendResourceWrapper<DeviceResourceType::Fence>
@@ -244,7 +252,8 @@ class Sampler : public BackendResourceWrapper<DeviceResourceType::Sampler>
 public:
 	Sampler(Device& in_device,
 		const BackendDeviceResource& in_sampler,
-		const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_sampler, in_debug_name) {}
+		const std::string_view& in_debug_name,
+		uint32_t in_srv_index) : BackendResourceWrapper(in_device, in_sampler, in_debug_name, in_srv_index) {}
 	~Sampler();
 };
 
@@ -334,13 +343,6 @@ struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 			MemoryUsage::CpuOnly, 
 			BufferUsageFlags()),
 			in_initial_data);
-	}
-	
-	static BufferInfo make_ubo(const size_t in_size)
-	{
-		return BufferInfo(BufferCreateInfo(in_size, 
-			MemoryUsage::CpuToGpu, 
-			BufferUsageFlags(BufferUsageFlagBits::UniformBuffer)));
 	}
 
 	static BufferInfo make_ssbo_cpu_visible(const size_t in_size, const std::span<uint8_t> in_initial_data = {})
@@ -694,6 +696,12 @@ public:
 		const uint64_t in_timeout = std::numeric_limits<uint64_t>::max());
 	void reset_fences(const std::span<FenceHandle>& in_fences);
 
+	uint32_t get_srv_descriptor_index(const BufferHandle& in_buffer);
+	uint32_t get_uav_descriptor_index(const BufferHandle& in_buffer);
+	uint32_t get_srv_descriptor_index(const TextureViewHandle& in_texture_view);
+	uint32_t get_uav_descriptor_index(const TextureViewHandle& in_texture_view);
+	uint32_t get_srv_descriptor_index(const SamplerHandle& in_sampler);
+
 	/** Commands */
 	void cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 		const RenderPassInfo& in_info);
@@ -750,19 +758,14 @@ public:
 	void cmd_set_input_assembly_state(const CommandListHandle& in_cmd_list, const PipelineInputAssemblyStateCreateInfo& in_info);
 	void cmd_set_rasterization_state(const CommandListHandle& in_cmd_list, const PipelineRasterizationStateCreateInfo& in_info);
 	void cmd_bind_shader(const CommandListHandle& in_cmd_list, const PipelineShaderStage& in_stage);
+	void cmd_push_constants(const CommandListHandle& in_cmd_list,
+		const ShaderStageFlags in_shader_stage_flags,
+		const uint32_t in_offset,
+		const uint32_t in_size,
+		const void* in_data);
 
 	/** Dynamic states */
 	void cmd_set_scissor(const CommandListHandle& in_cmd_list, const Rect2D& in_scissor);
-
-	/** Descriptor management */
-	void cmd_bind_ubo(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
-		const BufferHandle& in_handle);
-	void cmd_bind_ssbo(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding,
-		const BufferHandle& in_handle);
-	void cmd_bind_sampler(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
-		const SamplerHandle& in_handle);
-	void cmd_bind_texture_view(const CommandListHandle& in_cmd_list, const uint32_t in_set, const uint32_t in_binding, 
-		const TextureViewHandle& in_handle);
 
 	/** Swapchain */
 	GfxResult acquire_swapchain_texture(const SwapchainHandle& in_swapchain,

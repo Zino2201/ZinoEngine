@@ -75,15 +75,19 @@ VulkanDevice::VulkanDevice(VulkanBackend& in_backend, vkb::Device&& in_device) :
 	allocator(nullptr),
 	device_wrapper(DeviceWrapper(std::move(in_device))),
 	surface_manager(*this),
-	framebuffer_manager(*this)
+	framebuffer_manager(*this),
+	descriptor_manager(*this)
 {
-	VmaAllocatorCreateInfo create_info = {};
-	create_info.instance = backend.get_instance();
-	create_info.device = device_wrapper.device.device;
-	create_info.physicalDevice = device_wrapper.device.physical_device.physical_device;
+	{
+		VmaAllocatorCreateInfo create_info = {};
+		create_info.instance = backend.get_instance();
+		create_info.device = device_wrapper.device.device;
+		create_info.physicalDevice = device_wrapper.device.physical_device.physical_device;
 
-	// TODO: Error check
-	vmaCreateAllocator(&create_info, &allocator);
+		VkResult result = vmaCreateAllocator(&create_info, &allocator);
+		if (result != VK_SUCCESS)
+			logger::fatal(log_vulkan, "Failed to create memory allocator");
+	}
 }
 	
 VulkanDevice::~VulkanDevice()
@@ -94,10 +98,6 @@ VulkanDevice::~VulkanDevice()
 void VulkanDevice::new_frame()
 {
 	framebuffer_manager.new_frame();
-	
-	/** Update descriptor sets */
-	for(auto& set_allocator : descriptor_set_allocators)
-		set_allocator.new_frame();
 }
 
 void VulkanDevice::set_resource_name(const std::string_view& in_name, 
@@ -125,7 +125,7 @@ void VulkanDevice::set_resource_name(const std::string_view& in_name,
 		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanTextureView>(in_handle)->get_image_view());
 		break;
 	case DeviceResourceType::Sampler:
-		info.objectHandle = in_handle;
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanSampler>(in_handle)->get_sampler());
 		break;
 	case DeviceResourceType::Swapchain:
 		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanSwapChain>(in_handle)->get_swapchain().swapchain);
@@ -155,7 +155,7 @@ void VulkanDevice::set_resource_name(const std::string_view& in_name,
 
 Result<BackendDeviceResource, GfxResult> VulkanDevice::create_buffer(const BufferCreateInfo& in_create_info)
 {
-	ZE_CHECK(in_create_info.size != 0 && in_create_info.usage_flags != BufferUsageFlags())
+	ZE_CHECK(in_create_info.size != 0 && in_create_info.usage_flags != BufferUsageFlags());
 
 	VkBufferCreateInfo buffer_create_info = {};
 	buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -174,9 +174,6 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_buffer(const Buffe
 	if(in_create_info.usage_flags & BufferUsageFlagBits::IndexBuffer)
 		buffer_create_info.usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
 	
-	if(in_create_info.usage_flags & BufferUsageFlagBits::UniformBuffer)
-		buffer_create_info.usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-	
 	if(in_create_info.usage_flags & BufferUsageFlagBits::StorageBuffer)
 		buffer_create_info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 	
@@ -192,7 +189,7 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_buffer(const Buffe
 	VmaAllocationCreateInfo alloc_create_info = {};
 	alloc_create_info.flags = 0;
 	alloc_create_info.usage = convert_memory_usage(in_create_info.mem_usage);
-	
+
 	VmaAllocation allocation;
 	VkBuffer handle;
 	VmaAllocationInfo alloc_info;
@@ -206,7 +203,18 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_buffer(const Buffe
 	if(result != VK_SUCCESS)
 		return make_error(convert_result(result));
 
-	auto buffer = new_resource<VulkanBuffer>(*this, handle, allocation, alloc_info);
+	VulkanDescriptorManager::DescriptorIndexHandle srv_index;
+	VulkanDescriptorManager::DescriptorIndexHandle uav_index;
+
+	if (in_create_info.usage_flags & BufferUsageFlagBits::StorageBuffer)
+	{
+		srv_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::StorageBuffer, false);
+		uav_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::StorageBuffer, true);
+		descriptor_manager.update_descriptor(srv_index, handle, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+		descriptor_manager.update_descriptor(uav_index, handle, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	}
+
+	auto buffer = new_resource<VulkanBuffer>(*this, handle, allocation, alloc_info, srv_index, uav_index);
 	return make_result(buffer.get());
 }
 	
@@ -652,7 +660,7 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture(const Text
 	if(result != VK_SUCCESS)
 		return make_error(convert_result(result));
 
-	auto ret = new_resource<VulkanTexture>(*this, image, allocation);
+	auto ret = new_resource<VulkanTexture>(*this, image, allocation, create_info.usage);
 	return make_result(ret.get());
 }
 
@@ -679,7 +687,27 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture_view(const
 	if(result != VK_SUCCESS)
 		return make_error(convert_result(result));
 
-	auto ret = new_resource<VulkanTextureView>(*this, view);
+	VulkanDescriptorManager::DescriptorIndexHandle srv_index;
+	VulkanDescriptorManager::DescriptorIndexHandle uav_index;
+
+	if (get_resource<VulkanTexture>(in_create_info.texture)->get_image_usage_flags() & VK_IMAGE_USAGE_SAMPLED_BIT)
+	{
+		if (in_create_info.type == TextureViewType::Tex2D)
+		{
+			srv_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::Texture2D, false);
+			uav_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::Texture2D, true);
+		}
+		else if (in_create_info.type == TextureViewType::TexCube)
+		{
+			srv_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::TextureCube, false);
+			uav_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::TextureCube, true);
+		}
+
+		descriptor_manager.update_descriptor(srv_index, create_info.viewType, view);
+		descriptor_manager.update_descriptor(uav_index, create_info.viewType, view);
+	}
+
+	auto ret = new_resource<VulkanTextureView>(*this, view, srv_index, uav_index);
 	return make_result(ret.get());
 }
 
@@ -711,7 +739,13 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_sampler(const Samp
 	if(result != VK_SUCCESS)
 		return make_error(convert_result(result));
 
-	return make_result(reinterpret_cast<BackendDeviceResource>(sampler));
+	VulkanDescriptorManager::DescriptorIndexHandle srv_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::Sampler, 
+		false);
+
+	descriptor_manager.update_descriptor(srv_index, sampler);
+
+	auto ret = new_resource<VulkanSampler>(*this, sampler, srv_index);
+	return make_result(ret.get());
 }
 
 Result<BackendDeviceResource, GfxResult> VulkanDevice::create_semaphore(const SemaphoreCreateInfo& in_create_info)
@@ -759,47 +793,6 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_fence(const FenceC
 
 Result<BackendDeviceResource, GfxResult> VulkanDevice::create_pipeline_layout(const PipelineLayoutCreateInfo& in_create_info)
 {
-	std::vector<VkDescriptorSetLayout> set_layouts;
-	set_layouts.reserve(in_create_info.set_layouts.size());
-
-	uint32_t descriptor_type_mask = 0;
-
-	for(const auto& set : in_create_info.set_layouts)
-	{
-		std::vector<VkDescriptorSetLayoutBinding> bindings;
-		bindings.reserve(set.bindings.size());
-		for(const auto& binding : set.bindings)
-		{
-			VkDescriptorSetLayoutBinding info = {};
-			info.descriptorType = convert_descriptor_type(binding.type);
-			info.stageFlags = convert_shader_stage_flags(binding.stage);
-			info.descriptorCount = binding.count;
-			info.binding = binding.binding;
-			info.pImmutableSamplers = nullptr;
-			bindings.emplace_back(info);
-
-			if(~descriptor_type_mask & (1 << info.descriptorType))
-			{
-				descriptor_type_mask |= 1 << info.descriptorType;
-			}
-		}
-		
-		VkDescriptorSetLayoutCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		create_info.pNext = nullptr;
-		create_info.flags = 0;
-		create_info.bindingCount = static_cast<uint32_t>(bindings.size());
-		create_info.pBindings = bindings.data();
-
-		VkDescriptorSetLayout set_layout;
-		vkCreateDescriptorSetLayout(get_device(),
-			&create_info,
-			nullptr,
-			&set_layout);
-
-		set_layouts.emplace_back(set_layout);		
-	}
-
 	std::vector<VkPushConstantRange> push_constant_ranges;
 	for(const auto& push_constant : in_create_info.push_constant_ranges)
 	{
@@ -814,8 +807,8 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_pipeline_layout(co
 	create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	create_info.pNext = nullptr;
 	create_info.flags = 0;
-	create_info.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
-	create_info.pSetLayouts = set_layouts.data();
+	create_info.setLayoutCount = 1;
+	create_info.pSetLayouts = &descriptor_manager.get_global_descriptor_set_layout();
 	create_info.pushConstantRangeCount = static_cast<uint32_t>(push_constant_ranges.size());
 	create_info.pPushConstantRanges = push_constant_ranges.data();
 
@@ -827,20 +820,7 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_pipeline_layout(co
 	if(result != VK_SUCCESS)
 		return make_error(convert_result(result));
 
-	auto ret = new_resource<VulkanPipelineLayout>(*this, layout, set_layouts, descriptor_type_mask);
-	auto* layout_object = get_resource<VulkanPipelineLayout>(ret.get());
-
-	/** Create allocators */
-	size_t idx = 0;
-	for(const auto& set_layout : layout_object->set_layouts)
-	{
-		size_t allocator_idx = descriptor_set_allocators.emplace(*this,
-			*layout_object,
-			set_layout);
-		layout_object->allocator_indices[idx] = allocator_idx;
-		idx++;
-	}
-
+	auto ret = new_resource<VulkanPipelineLayout>(*this, layout);
 	return make_result(ret.get());
 }
 
@@ -896,14 +876,6 @@ void VulkanDevice::reset_command_pool(const BackendDeviceResource& in_pool)
 		0);	
 }
 
-Result<BackendDeviceResource, GfxResult> VulkanDevice::allocate_descriptor_set(const BackendDeviceResource& in_pipeline_layout,
-	const uint32_t in_set,
-	const std::span<Descriptor, max_bindings>& in_descriptors)
-{
-	auto& set_allocator = descriptor_set_allocators[get_resource<VulkanPipelineLayout>(in_pipeline_layout)->allocator_indices[in_set]];
-	return make_result(reinterpret_cast<BackendDeviceResource>(set_allocator.allocate(in_descriptors)));
-}
-
 void VulkanDevice::destroy_buffer(const BackendDeviceResource& in_buffer)
 {
 	free_resource<VulkanBuffer>(in_buffer);
@@ -946,7 +918,7 @@ void VulkanDevice::destroy_texture_view(const BackendDeviceResource& in_texture_
 
 void VulkanDevice::destroy_sampler(const BackendDeviceResource& in_sampler)
 {
-	vkDestroySampler(get_device(), reinterpret_cast<VkSampler>(in_sampler), nullptr);	
+	free_resource<VulkanSampler>(in_sampler);	
 }
 
 void VulkanDevice::destroy_semaphore(const BackendDeviceResource& in_semaphore)
@@ -962,6 +934,31 @@ void VulkanDevice::destroy_fence(const BackendDeviceResource& in_fence)
 void VulkanDevice::destroy_pipeline_layout(const BackendDeviceResource& in_pipeline_layout)
 {
 	free_resource<VulkanPipelineLayout>(in_pipeline_layout);				
+}
+
+uint32_t VulkanDevice::get_buffer_srv_descriptor_index(const BackendDeviceResource& in_handle)
+{
+	return get_resource<VulkanBuffer>(in_handle)->get_srv_index();
+}
+
+uint32_t VulkanDevice::get_buffer_uav_descriptor_index(const BackendDeviceResource& in_handle)
+{
+	return get_resource<VulkanBuffer>(in_handle)->get_uav_index();
+}
+
+uint32_t VulkanDevice::get_texture_view_srv_descriptor_index(const BackendDeviceResource& in_handle)
+{
+	return get_resource<VulkanTextureView>(in_handle)->get_srv_index();
+}
+
+uint32_t VulkanDevice::get_texture_view_uav_descriptor_index(const BackendDeviceResource& in_handle)
+{
+	return get_resource<VulkanTextureView>(in_handle)->get_uav_index();
+}
+
+uint32_t VulkanDevice::get_sampler_srv_descriptor_index(const BackendDeviceResource& in_handle)
+{
+	return get_resource<VulkanSampler>(in_handle)->get_srv_index();
 }
 
 /** Buffers */
@@ -1147,19 +1144,16 @@ void VulkanDevice::cmd_end_render_pass(const BackendDeviceResource& in_list)
 	vkCmdEndRenderPass(get_resource<VulkanCommandList>(in_list)->get_command_buffer());
 }
 
-void VulkanDevice::cmd_bind_descriptor_sets(const BackendDeviceResource in_list,
-	const PipelineBindPoint in_bind_point,
-	const BackendDeviceResource in_pipeline_layout, 
-	const std::span<BackendDeviceResource> in_descriptor_sets)
+void VulkanDevice::cmd_bind_descriptors(const BackendDeviceResource in_list, 
+	const PipelineBindPoint in_bind_point, 
+	const BackendDeviceResource in_pipeline_layout)
 {
-	vkCmdBindDescriptorSets(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+	descriptor_manager.flush_updates();
+
+	descriptor_manager.bind_descriptors(
+		get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
 		convert_pipeline_bind_point(in_bind_point),
-		get_resource<VulkanPipelineLayout>(in_pipeline_layout)->get_pipeline_layout(),
-		0,
-		static_cast<uint32_t>(in_descriptor_sets.size()),
-		reinterpret_cast<VkDescriptorSet*>(in_descriptor_sets.data()),
-		0,
-		nullptr);
+		get_resource<VulkanPipelineLayout>(in_pipeline_layout)->get_pipeline_layout());
 }
 
 void VulkanDevice::cmd_bind_vertex_buffers(const BackendDeviceResource& in_list, 
@@ -1293,6 +1287,21 @@ void VulkanDevice::cmd_copy_buffer_to_texture(const BackendDeviceResource in_lis
 		convert_texture_layout(in_dst_layout),
 		static_cast<uint32_t>(regions.size()),
 		regions.data());
+}
+
+void VulkanDevice::cmd_push_constants(const BackendDeviceResource in_list, 
+	const BackendDeviceResource in_pipeline_layout, 
+	ShaderStageFlags in_stage_flags, 
+	const uint32_t in_offset, 
+	const uint32_t in_size, 
+	const void* in_data)
+{
+	vkCmdPushConstants(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		get_resource<VulkanPipelineLayout>(in_pipeline_layout)->get_pipeline_layout(),
+		convert_shader_stage_flags(in_stage_flags),
+		in_offset,
+		in_size,
+		in_data);
 }
 
 void VulkanDevice::end_cmd_list(const BackendDeviceResource& in_list)

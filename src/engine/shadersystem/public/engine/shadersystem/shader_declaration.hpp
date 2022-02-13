@@ -46,6 +46,17 @@ struct ShaderParameter
 			return true;
 		}
 	}
+
+	bool is_uav() const
+	{
+		switch (type)
+		{
+		default:
+			return false;
+		case ShaderParameterType::RWByteAddressBuffer:
+			return true;
+		}
+	}
 };
 
 struct ShaderStage

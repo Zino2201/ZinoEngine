@@ -91,10 +91,11 @@ public:
 	[[nodiscard]] virtual const std::vector<BackendDeviceResource>& get_swapchain_backbuffer_views(const BackendDeviceResource& in_swapchain) = 0;
 	[[nodiscard]] virtual Format get_swapchain_format(const BackendDeviceResource& in_swapchain) = 0;
 
-	/** Pipeline layout */
-	[[nodiscard]] virtual Result<BackendDeviceResource, GfxResult> allocate_descriptor_set(const BackendDeviceResource& in_pipeline_layout,
-		const uint32_t in_set,
-		const std::span<Descriptor, max_bindings>& in_descriptors) = 0;
+	[[nodiscard]] virtual uint32_t get_buffer_srv_descriptor_index(const BackendDeviceResource& in_handle) = 0;
+	[[nodiscard]] virtual uint32_t get_buffer_uav_descriptor_index(const BackendDeviceResource& in_handle) = 0;
+	[[nodiscard]] virtual uint32_t get_texture_view_srv_descriptor_index(const BackendDeviceResource& in_handle) = 0;
+	[[nodiscard]] virtual uint32_t get_texture_view_uav_descriptor_index(const BackendDeviceResource& in_handle) = 0;
+	[[nodiscard]] virtual uint32_t get_sampler_srv_descriptor_index(const BackendDeviceResource& in_handle) = 0;
 
 	/** Commands */
 	virtual void begin_cmd_list(const BackendDeviceResource& in_list) = 0;
@@ -123,10 +124,9 @@ public:
 		const uint32_t in_first_instance) = 0;
 	virtual void cmd_end_render_pass(const BackendDeviceResource& in_list) = 0;
 
-	virtual void cmd_bind_descriptor_sets(const BackendDeviceResource in_list,
+	virtual void cmd_bind_descriptors(const BackendDeviceResource in_list,
 		const PipelineBindPoint in_bind_point,
-		const BackendDeviceResource in_pipeline_layout,
-		const std::span<BackendDeviceResource> in_descriptor_sets) = 0;
+		const BackendDeviceResource in_pipeline_layout) = 0;
 	virtual void cmd_bind_vertex_buffers(const BackendDeviceResource& in_list,
 		const uint32_t in_first_binding,
 		const std::span<BackendDeviceResource> in_buffers,
@@ -158,6 +158,13 @@ public:
 		const BackendDeviceResource in_dst_texture,
 		const TextureLayout in_dst_layout,
 		const std::span<BufferTextureCopyRegion>& in_copy_regions) = 0;
+
+	virtual void cmd_push_constants(const BackendDeviceResource in_list,
+		const BackendDeviceResource in_pipeline_layout,
+		ShaderStageFlags in_stage_flags,
+		const uint32_t offset,
+		const uint32_t size,
+		const void* in_data) = 0;
 
 	virtual void end_cmd_list(const BackendDeviceResource& in_list) = 0;
 

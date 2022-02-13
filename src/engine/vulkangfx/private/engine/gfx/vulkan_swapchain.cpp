@@ -19,7 +19,10 @@ VulkanSwapChain::VulkanSwapChain(VulkanDevice& in_device,
 	
 	for(const auto& image_view : image_view_list.value())
 	{
-		image_views.push_back(new_resource<VulkanTextureView>(device, image_view));
+		image_views.push_back(new_resource<VulkanTextureView>(device, 
+			image_view, 
+			VulkanDescriptorManager::DescriptorIndexHandle {}, 
+			VulkanDescriptorManager::DescriptorIndexHandle {}));
 	}
 }
 

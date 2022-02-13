@@ -34,15 +34,8 @@ struct WindowData
 
 struct ViewportDrawData
 {
-	struct GlobalData
-	{
-		glm::vec2 translate;
-		glm::vec2 scale;
-	};
-
 	gfx::UniqueBuffer vertex_buffer;
 	gfx::UniqueBuffer index_buffer;
-	gfx::UniformBuffer<GlobalData> global_data;
 	size_t vertex_buffer_size;
 	size_t index_buffer_size;
 

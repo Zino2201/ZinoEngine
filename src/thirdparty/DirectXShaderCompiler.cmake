@@ -1,6 +1,6 @@
 CPMAddPackage(
 	NAME DirectXShaderCompiler 
-	URL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.6.2106/dxc_2021_07_01.zip)
+	URL https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.6.2112/dxc_2021_12_08.zip)
 
 file(COPY ${DirectXShaderCompiler_SOURCE_DIR}/bin/x64/dxcompiler.dll DESTINATION ${ZE_BIN_DIR})
 set(DXC_ROOT_DIR ${DirectXShaderCompiler_SOURCE_DIR} CACHE STRING "" FORCE)

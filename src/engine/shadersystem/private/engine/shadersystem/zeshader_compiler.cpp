@@ -41,7 +41,7 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 			{
 				word.push_back(c);
 				c = static_cast<char>(stream.get());
-			} while (std::isalpha(c));
+			} while (std::isalnum(c));
 
 			if (!blocks.empty() && blocks.top() == BlockType::ZESHADER_PARAMETERS)
 			{
@@ -51,7 +51,7 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 					if(!std::isspace(c))
 						name.push_back(c);
 					c = static_cast<char>(stream.get());
-				} while (std::isalpha(c) || c == '_');
+				} while (std::isalnum(c) || c == '_');
 
 				if(c != ';' && !skip_until(stream, ';'))
 					return make_error(std::string("Parameter must finish with a semi-colon."));
@@ -69,6 +69,8 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 					parameter_type = ShaderParameterType::Float3;
 				else if (word == "float4")
 					parameter_type = ShaderParameterType::Float4;
+				else if (word == "float4x4")
+					parameter_type = ShaderParameterType::Float4x4;
 				else if (word == "Texture2D")
 					parameter_type = ShaderParameterType::Texture2D;
 				else if (word == "ByteAddressBuffer")

@@ -18,7 +18,7 @@ Result<std::unique_ptr<Backend>, std::string> VulkanBackendModule::create_vulkan
 {
 	vkb::InstanceBuilder builder;
 	builder.set_engine_name("ZinoEngine");
-	builder.require_api_version(1, 1, 0);
+	builder.require_api_version(1, 2, 0);
 
 	/** Customize our instance based on the flags */
 	if (in_flags & BackendFlagBits::DebugLayers)

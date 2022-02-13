@@ -5,6 +5,97 @@
 #include <Unknwn.h>
 #include <dxcapi.h>
 #include <spirv_cross/spirv_cross.hpp>
+#include "engine/module/module_manager.hpp"
+#include "engine/filesystem/filesystem_module.hpp"
+
+// {21AE0D66-7128-4C24-AC91-0CC0C7F38DBA}
+CLSID_SCOPE const GUID CLSID_ZEIncludeHandler =
+{
+	0x21ae0d66,
+	0x7128,
+	0x4c24,
+	{ 0xac, 0x91, 0xc, 0xc0, 0xc7, 0xf3, 0x8d, 0xba }
+};
+
+CROSS_PLATFORM_UUIDOF(ZEIncludeHandler, "21AE0D66-7128-4C24-AC91-0CC0C7F38DBA");
+struct ZEIncludeHandler : public IDxcIncludeHandler
+{
+public:
+	ZEIncludeHandler(IDxcUtils* in_utils) : utils(in_utils) {}
+
+	HRESULT STDMETHODCALLTYPE LoadSource(LPCWSTR pFilename, IDxcBlob** ppIncludeSource) override
+	{
+		using namespace ze;
+
+		if (!ppIncludeSource)
+			return E_INVALIDARG;
+
+		auto& filesystem = get_module<filesystem::Module>("FileSystem")->get_filesystem();
+		const std::string file_name = boost::locale::conv::utf_to_utf<char, wchar_t>(pFilename);
+		if(auto file = filesystem.read("assets/shaders/" + file_name))
+		{
+			std::istream stream(file.get_value().get());
+			std::string str;
+			while(true)
+			{
+				char c = static_cast<char>(stream.get());
+				if (stream.eof())
+					break;
+				str.push_back(c);
+			}
+
+			IDxcBlobEncoding* blob;
+			utils->CreateBlob(str.data(), str.size(), DXC_CP_ACP, &blob);
+			blob->AddRef();
+			*ppIncludeSource = blob;
+		}
+		else
+		{
+			logger::error("Can't find file: {}", std::to_string(file.get_error()));
+			return E_INVALIDARG;
+		}
+
+		return S_OK;
+	}
+
+	ULONG STDMETHODCALLTYPE AddRef() override
+	{
+		++ref_count;
+		return ref_count;
+	}
+
+	ULONG STDMETHODCALLTYPE Release() override
+	{
+		--ref_count;
+		const ULONG result = ref_count;
+		if (result == 0)
+			delete this;
+		return result;
+	}
+
+	HRESULT STDMETHODCALLTYPE QueryInterface(const IID& iid, void** object) override
+	{
+		if (IsEqualIID(iid, __uuidof(IDxcIncludeHandler)))
+		{
+			*object = static_cast<IDxcIncludeHandler*>(this);
+			this->AddRef();
+			return S_OK;
+		}
+		else if (IsEqualIID(iid, __uuidof(IUnknown)))
+		{
+			*object = static_cast<IUnknown*>(this);
+			this->AddRef();
+			return S_OK;
+		}
+		else
+		{
+			return E_NOINTERFACE;
+		}
+	}
+private:
+	std::atomic<ULONG> ref_count;
+	IDxcUtils* utils;
+};
 
 namespace ze::gfx
 {
@@ -15,7 +106,11 @@ class UnknownSmartPtr
 {
 public:
 	UnknownSmartPtr() : ptr(nullptr) {}
-	UnknownSmartPtr(T* in_ptr) : ptr(in_ptr) {}
+	UnknownSmartPtr(T* in_ptr) : ptr(in_ptr)
+	{
+		ptr->AddRef();
+	}
+	
 	~UnknownSmartPtr()
 	{
 		if (ptr)
@@ -60,6 +155,7 @@ public:
 	VulkanShaderCompiler()
 	{
 		DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(compiler.get_address_of()));
+		DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(utils.get_address_of()));
 	}
 
 	ShaderCompilerOutput compile_shader(const ShaderCompilerInput& in_input) override
@@ -79,7 +175,9 @@ public:
 			L"-spirv",
 			L"-WX", 
 			L"-Zpr",
+			L"-Od",
 			L"-Oconfig=--loop-unroll",
+			L"-HV 2021",
 		};
 
 		/** Keep transient strings alive */
@@ -96,16 +194,16 @@ public:
 			switch(in_input.stage)
 			{
 			case ShaderStageFlagBits::Vertex:
-				args.emplace_back(L"-T vs_6_0");
+				args.emplace_back(L"-T vs_6_6");
 				break;
 			case ShaderStageFlagBits::Fragment:
-				args.emplace_back(L"-T ps_6_0");
+				args.emplace_back(L"-T ps_6_6");
 				break;
 			case ShaderStageFlagBits::Compute:
-				args.emplace_back(L"-T cs_6_0");
+				args.emplace_back(L"-T cs_6_6");
 				break;
 			case ShaderStageFlagBits::Geometry:
-				args.emplace_back(L"-T gs_6_0");
+				args.emplace_back(L"-T gs_6_6");
 				break;
 			case ShaderStageFlagBits::TessellationControl:
 			case ShaderStageFlagBits::TessellationEvaluation:
@@ -115,11 +213,14 @@ public:
 			}
 		}
 
+
+		UnknownSmartPtr<ZEIncludeHandler> include_handler = new ZEIncludeHandler(utils.get());
+
 		UnknownSmartPtr<IDxcResult> result;
 		compiler->Compile(&src_buffer, 
 			args.data(), 
-			static_cast<uint32_t>(args.size()), 
-			nullptr, 
+			static_cast<uint32_t>(args.size()),
+			include_handler.get(),
 			IID_PPV_ARGS(result.get_address_of()));
 
 		UnknownSmartPtr<IDxcBlobUtf8> errors;
@@ -204,6 +305,22 @@ public:
 					spv_compiler.get_decoration(sampler.id, spv::DecorationBinding),
 					1 });
 			}
+
+			for(const auto& push_constant : resources.push_constant_buffers)
+			{
+				const auto& type = spv_compiler.get_type(push_constant.base_type_id);
+
+				std::vector<ShaderReflectionMember> members;
+				for (uint32_t i = 0; i < type.member_types.size(); ++i)
+				{
+					members.push_back({
+						spv_compiler.get_member_name(push_constant.base_type_id, i),
+						spv_compiler.get_declared_struct_member_size(type, i),
+						spv_compiler.type_struct_member_offset(type, i) });
+				}
+
+				output.reflection_data.push_constants.emplace_back(spv_compiler.get_declared_struct_size(type), members);
+			}
 		}
 		else
 		{
@@ -223,6 +340,7 @@ private:
 	}
 private:
 	UnknownSmartPtr<IDxcCompiler3> compiler;
+	UnknownSmartPtr<IDxcUtils> utils;
 };
 
 using VulkanShaderCompilerModule = ShaderCompilerModule<VulkanShaderCompiler>;

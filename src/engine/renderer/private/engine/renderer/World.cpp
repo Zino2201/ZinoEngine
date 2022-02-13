@@ -1,9 +1,9 @@
 #include "engine/renderer/World.hpp"
 
+#if 0
 namespace ze::renderer
 {
 
-#if 0
 
 size_t World::add_node(RenderNode&& in_node)
 {
@@ -112,6 +112,6 @@ MeshBatch& World::merge_or_add_to_compatible_batch(const RenderNode::MeshData& i
 	return batches[idx];
 }
 
-#endif
 
 }
+#endif

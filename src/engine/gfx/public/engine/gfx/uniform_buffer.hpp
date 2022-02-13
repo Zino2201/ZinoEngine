@@ -67,9 +67,6 @@ protected:
 }
 
 template<typename T>
-using UniformBuffer = detail::GPUBuffer<T, BufferUsageFlagBits::UniformBuffer>;
-
-template<typename T>
 using StorageBuffer = detail::GPUBuffer<T, BufferUsageFlagBits::StorageBuffer>;
 
 }

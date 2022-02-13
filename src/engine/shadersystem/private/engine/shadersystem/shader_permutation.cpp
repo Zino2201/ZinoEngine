@@ -92,73 +92,51 @@ void ShaderPermutation::compile()
 
 		if (state != ShaderPermutationState::Unavailable)
 		{
-			sets.clear();
-			auto& set = sets.emplace_back();
-			std::vector<gfx::DescriptorSetLayoutBinding> bindings;
+			shader_stage_flags = {};
+
+			gfx::PushConstantRange push_constant_range(gfx::ShaderStageFlags(), 0, 0);
 
 			for (auto [stage, output] : outputs)
 			{
-				for (const auto& resource : output.reflection_data.resources)
+				shader_stage_flags |= stage;
+				for (const auto& push_constant : output.reflection_data.push_constants)
 				{
-					/** Check for matching parameter to build the parameter_infos map */
-					for(const auto& parameter : shader.get_declaration().parameters)
+					/** Build parameter info map */
+					for(const auto& member : push_constant.members)
 					{
-						if(parameter.name == resource.name 
-							&& !parameter.is_stored_in_buffer())
+						for(const auto& parameter : shader.get_declaration().parameters)
 						{
-							parameter_infos.insert({ parameter.name, ParameterInfo { resource.set, resource.binding, 0 }});
-							break;
-						}
-						else if(!resource.members.empty() && parameter.is_stored_in_buffer())
-						{
-							for(const auto& member : resource.members)
+							if(parameter.name == member.name)
 							{
-								if(member.name == parameter.name)
-								{
-									parameter_infos.insert({ parameter.name, ParameterInfo { resource.set, resource.binding, member.offset }});
-								}
+								parameter_infos.insert({ parameter.name, ParameterInfo { member.offset, member.size, parameter.is_uav() } });
+								break;
 							}
 						}
 					}
 
-					gfx::DescriptorType type = gfx::DescriptorType::UniformBuffer;
-					switch(resource.type)
-					{
-					case gfx::ShaderReflectionResourceType::Texture2D:
-					case gfx::ShaderReflectionResourceType::TextureCube:
-						type = gfx::DescriptorType::SampledTexture;
-						break;
-					case gfx::ShaderReflectionResourceType::Sampler:
-						type = gfx::DescriptorType::Sampler;
-						break;
-					case gfx::ShaderReflectionResourceType::StorageBuffer:
-						type = gfx::DescriptorType::StorageBuffer;
-						break;
-					}
-
-					bool found_existing = false;
-					for (auto& binding : bindings)
-					{
-						if (binding.binding == resource.binding)
-						{
-							binding.stage |= gfx::ShaderStageFlags(stage);
-							found_existing = true;
-						}
-					}
-
-					if(!found_existing)
-						bindings.emplace_back(
-							resource.binding,
-							type,
-							1,
-							gfx::ShaderStageFlags(stage));
-
-					set.emplace_back(type, resource.binding, resource.size);
+					push_constant_range.stage |= stage;
+					push_constant_range.size = push_constant.size;
+					parameters_size = push_constant.size;
 				}
 			}
 
+			std::vector bindings =
+			{
+				gfx::DescriptorSetLayoutBinding(gfx::srv_storage_buffer_binding, 
+					gfx::DescriptorType::StorageBuffer, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+				gfx::DescriptorSetLayoutBinding(gfx::uav_storage_buffer_binding, 
+					gfx::DescriptorType::StorageBuffer, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+				gfx::DescriptorSetLayoutBinding(gfx::srv_texture_2D_binding, 
+					gfx::DescriptorType::SampledTexture, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+				gfx::DescriptorSetLayoutBinding(gfx::srv_texture_cube_binding, 
+					gfx::DescriptorType::SampledTexture, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+				gfx::DescriptorSetLayoutBinding(gfx::srv_sampler_binding, 
+					gfx::DescriptorType::Sampler, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+			};
+			
 			std::array set_layouts = { gfx::DescriptorSetLayoutCreateInfo(bindings) };
-			auto result = gfx::get_device()->create_pipeline_layout(gfx::PipelineLayoutInfo({ set_layouts, {} }));
+			std::array push_constant_ranges = { push_constant_range };
+			auto result = gfx::get_device()->create_pipeline_layout(gfx::PipelineLayoutInfo({ set_layouts, push_constant_ranges }));
 			if (result)
 				pipeline_layout = gfx::UniquePipelineLayout(result.get_value());
 			else

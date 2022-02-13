@@ -46,7 +46,7 @@ Result<std::unique_ptr<Material>, std::string> compile_zematerial(shadersystem::
 
 				while(true)
 				{
-					c = stream.get();
+					c = static_cast<char>(stream.get());
 					if (c == '"')
 						break;
 

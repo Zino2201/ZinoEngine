@@ -5,6 +5,31 @@
 namespace ze::gfx
 {
 
+class VulkanSampler final
+{
+public:
+	VulkanSampler(VulkanDevice& in_device,
+		VkSampler in_sampler,
+		VulkanDescriptorManager::DescriptorIndexHandle in_srv_index)
+		: device(in_device), sampler(in_sampler), srv_index(in_srv_index) {}
+
+	~VulkanSampler()
+	{
+		if (srv_index)
+			device.get_descriptor_manager().free_index(srv_index);
+
+		vkDestroySampler(device.get_device(), sampler, nullptr);
+	}
+
+	[[nodiscard]] VulkanDevice& get_device() const { return device; }
+	[[nodiscard]] VkSampler get_sampler() const { return sampler; }
+	uint32_t get_srv_index() const { return srv_index.index; }
+private:
+	VulkanDevice& device;
+	VkSampler sampler;
+	VulkanDescriptorManager::DescriptorIndexHandle srv_index;
+};
+
 inline VkFilter convert_filter(Filter in_filter)
 {
 	switch(in_filter)

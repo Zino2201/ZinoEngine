@@ -12,30 +12,35 @@ shader "ScatterUpload"
 
     compute
     {
-        cbuffer GlobalData
+        #include "core.hlsl"
+
+        struct GlobalData
         {
             uint offset;
             uint data_size;
             uint element_count;
             uint threads_per_element;
+            uint upload_buffer;
+            uint dst_buffer;
         };
 
-        ByteAddressBuffer upload_buffer;
-        RWByteAddressBuffer dst_buffer;
+        ZE_PUSH_CONSTANT GlobalData global_data;
 
         [numthreads(64, 1, 1)]
         void main(uint thread_id : SV_DispatchThreadID)
         {
-            thread_id = thread_id + offset;
+            ByteAddressBuffer upload_buffer = get_resource<ByteAddressBuffer>(global_data.upload_buffer);
+            RWByteAddressBuffer dst_buffer = get_resource<RWByteAddressBuffer>(global_data.dst_buffer);
+            thread_id = thread_id + global_data.offset;
 
-            const uint element_size = data_size + sizeof(uint);
-            uint element_index = thread_id / threads_per_element;
+            const uint element_size = global_data.data_size + sizeof(uint);
+            uint element_index = thread_id / global_data.threads_per_element;
 
-            if(element_index < element_count)
+            if(element_index < global_data.element_count)
             {
-                uint element_thread_offset = thread_id * threads_per_element % data_size;
+                uint element_thread_offset = thread_id * global_data.threads_per_element % global_data.data_size;
 
-                uint dst_index = upload_buffer.Load(element_index * element_size) * data_size + element_thread_offset;
+                uint dst_index = upload_buffer.Load(element_index * element_size) * global_data.data_size + element_thread_offset;
                 uint src_data = upload_buffer.Load(element_index * element_size + sizeof(uint) + element_thread_offset);
                 dst_buffer.Store(dst_index, src_data);
             }

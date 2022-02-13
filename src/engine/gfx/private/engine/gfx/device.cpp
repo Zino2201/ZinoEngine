@@ -68,7 +68,9 @@ Swapchain::Swapchain(Device& in_device,
 				TextureSubresourceRange(TextureAspectFlags(TextureAspectFlagBits::Color), 0, 1, 0, 1)
 			),
 			view,
-			"Swapchain Texture View")));
+			"Swapchain Texture View",
+			device.get_backend_device()->get_texture_view_srv_descriptor_index(in_swapchain),
+			device.get_backend_device()->get_texture_view_uav_descriptor_index(in_swapchain))));
 		i++;
 	}
 }
@@ -316,7 +318,10 @@ Result<BufferHandle, GfxResult> Device::create_buffer(BufferInfo in_create_info)
 	if(!result)
 		return result.get_error();
 
-	auto buffer = buffers.allocate(*this, result.get_value(), in_create_info.debug_name);
+	const auto srv_index = backend_device->get_buffer_srv_descriptor_index(result.get_value());
+	const auto uav_index = backend_device->get_buffer_uav_descriptor_index(result.get_value());
+
+	auto buffer = buffers.allocate(*this, result.get_value(), in_create_info.debug_name, srv_index, uav_index);
 	auto handle = cast_resource_ptr<BufferHandle>(buffer);
 	
 	if(!in_create_info.initial_data.empty())
@@ -430,15 +435,21 @@ Result<TextureViewHandle, GfxResult> Device::create_texture_view(TextureViewInfo
 		in_create_info.type,
 		in_create_info.format,
 		in_create_info.subresource_range);
+
 	auto result = backend_device->create_texture_view(create_info);
 	if(!result)
 		return result.get_error();
 
-	auto texture_view = texture_views.allocate(*this, 
+	const auto srv_index = backend_device->get_texture_view_srv_descriptor_index(result.get_value());
+	const auto uav_index = backend_device->get_texture_view_uav_descriptor_index(result.get_value());
+
+	const auto texture_view = texture_views.allocate(*this, 
 		*texture, 
 		create_info,
 		result.get_value(), 
-		in_create_info.debug_name);
+		in_create_info.debug_name,
+		srv_index,
+		uav_index);
 	return make_result(cast_resource_ptr<TextureViewHandle>(texture_view));
 }
 
@@ -498,7 +509,9 @@ Result<SamplerHandle, GfxResult> Device::create_sampler(const SamplerInfo& in_cr
 	if(!result)
 		return result.get_error();
 
-	auto sampler = samplers.allocate(*this, result.get_value(), in_create_info.debug_name);
+	const auto srv_index = backend_device->get_sampler_srv_descriptor_index(result.get_value());
+
+	auto sampler = samplers.allocate(*this, result.get_value(), in_create_info.debug_name, srv_index);
 	return make_result(cast_resource_ptr<SamplerHandle>(sampler));
 }
 
@@ -598,6 +611,31 @@ void Device::reset_fences(const std::span<FenceHandle>& in_fences)
 		wait_fences.emplace_back(cast_handle<Fence>(fence)->get_resource());
 	
 	backend_device->reset_fences(wait_fences);
+}
+
+uint32_t Device::get_srv_descriptor_index(const BufferHandle& in_buffer)
+{
+	return cast_handle<Buffer>(in_buffer)->get_srv_index();
+}
+
+uint32_t Device::get_uav_descriptor_index(const BufferHandle& in_buffer)
+{
+	return cast_handle<Buffer>(in_buffer)->get_uav_index();
+}
+
+uint32_t Device::get_srv_descriptor_index(const TextureViewHandle& in_texture_view)
+{
+	return cast_handle<TextureView>(in_texture_view)->get_srv_index();
+}
+
+uint32_t Device::get_uav_descriptor_index(const TextureViewHandle& in_texture_view)
+{
+	return cast_handle<TextureView>(in_texture_view)->get_uav_index();
+}
+
+uint32_t Device::get_srv_descriptor_index(const SamplerHandle& in_sampler)
+{
+	return cast_handle<Sampler>(in_sampler)->get_srv_index();
 }
 
 /** Commands */
@@ -815,6 +853,15 @@ void Device::cmd_bind_shader(const CommandListHandle& in_cmd_list, const Pipelin
 	cast_handle<CommandList>(in_cmd_list)->bind_shader(in_stage);
 }
 
+void Device::cmd_push_constants(const CommandListHandle& in_cmd_list,
+	const ShaderStageFlags in_shader_stage_flags,
+	const uint32_t in_offset,
+	const uint32_t in_size,
+	const void* in_data)
+{
+	cast_handle<CommandList>(in_cmd_list)->push_constants(in_shader_stage_flags, in_offset, in_size, in_data);
+}
+
 void Device::cmd_set_scissor(const CommandListHandle& in_cmd_list, const Rect2D& in_scissor)
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
@@ -827,51 +874,6 @@ void Device::cmd_bind_pipeline_layout(const CommandListHandle& in_cmd_list,
 {
 	auto list = cast_handle<CommandList>(in_cmd_list);
 	list->set_pipeline_layout(in_handle);
-}
-
-void Device::cmd_bind_ubo(const CommandListHandle& in_cmd_list, 
-	const uint32_t in_set, 
-	const uint32_t in_binding, 
-	const BufferHandle& in_handle)
-{
-	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_buffer_info(DescriptorType::UniformBuffer,
-		in_binding,
-		in_handle ? cast_handle<Buffer>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
-}
-
-void Device::cmd_bind_ssbo(const CommandListHandle& in_cmd_list,
-	const uint32_t in_set,
-	const uint32_t in_binding,
-	const BufferHandle& in_handle)
-{
-	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_buffer_info(DescriptorType::StorageBuffer,
-		in_binding,
-		in_handle ? cast_handle<Buffer>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
-}
-
-void Device::cmd_bind_texture_view(const CommandListHandle& in_cmd_list, 
-	const uint32_t in_set, 
-	const uint32_t in_binding, 
-	const TextureViewHandle& in_handle)
-{
-	auto list = cast_handle<CommandList>(in_cmd_list);
-
-	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_texture_view_info(in_binding,
-		in_handle ? cast_handle<TextureView>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
-}
-
-void Device::cmd_bind_sampler(const CommandListHandle& in_cmd_list, 
-	const uint32_t in_set, 
-	const uint32_t in_binding, 
-	const SamplerHandle& in_handle)
-{
-	ZE_CHECK(in_handle);
-
-	auto list = cast_handle<CommandList>(in_cmd_list);
-	list->set_descriptor(in_set, in_binding, in_handle ? Descriptor::make_sampler_info(in_binding,
-		in_handle ? cast_handle<Sampler>(in_handle)->get_resource() : null_backend_resource) : Descriptor());
 }
 
 void Device::cmd_end_render_pass(const CommandListHandle& in_cmd_list)

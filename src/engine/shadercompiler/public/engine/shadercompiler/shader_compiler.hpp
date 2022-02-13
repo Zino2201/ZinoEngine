@@ -49,9 +49,16 @@ struct ShaderReflectionResource
 	std::vector<ShaderReflectionMember> members;
 };
 
+struct ShaderReflectionPushConstant
+{
+	uint32_t size;
+	std::vector<ShaderReflectionMember> members;
+};
+
 struct ShaderReflectionData
 {
 	std::vector<ShaderReflectionResource> resources;
+	std::vector<ShaderReflectionPushConstant> push_constants;
 };
 
 struct ShaderCompilerOutput

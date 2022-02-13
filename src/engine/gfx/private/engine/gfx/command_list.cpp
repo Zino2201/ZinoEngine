@@ -7,18 +7,13 @@ CommandList::CommandList(Device& in_device,
 	const BackendDeviceResource& in_list,
 	const QueueType& in_type,
 	const std::string_view& in_debug_name) : BackendResourceWrapper(in_device, in_list, in_debug_name),
-	type(in_type), render_pass(null_backend_resource), pipeline_state_dirty(false), has_compute_stage(false), dirty_sets_mask(0)
+	type(in_type), render_pass(null_backend_resource), pipeline_state_dirty(false), has_compute_stage(false)
 {
-	bound_descriptor_sets.reserve(max_descriptor_sets);
 	reset();
 }
 
 void CommandList::reset()
 {
-	for (auto& set : descriptors)
-		for (auto& descriptor : set)
-			descriptor = Descriptor();
-
 	stages.clear();
 	has_compute_stage = false;
 	pipeline_layout = PipelineLayoutHandle();
@@ -37,8 +32,6 @@ void CommandList::prepare_draw()
 {
 	if (pipeline_state_dirty)
 		update_pipeline_state();
-
-	update_descriptors();
 }
 
 void CommandList::set_render_pass(const BackendDeviceResource& in_handle)
@@ -90,38 +83,11 @@ void CommandList::update_pipeline_state()
 			pipeline);
 	}
 
-	pipeline_state_dirty = false;
-}
-
-void CommandList::update_descriptors()
-{
-	if (dirty_sets_mask == 0)
-		return;
-
-	auto layout = Device::cast_handle<PipelineLayout>(pipeline_layout);
-	bound_descriptor_sets.clear();
-
-	for (uint32_t i = 0; i < max_descriptor_sets; ++i)
-	{
-		if (dirty_sets_mask & (1 << i))
-		{
-			auto result = device.get_backend_device()->allocate_descriptor_set(layout->get_resource(),
-				i,
-				descriptors[i]);
-			bound_descriptor_sets.emplace_back(result.get_value());
-		}
-	}
-
-	device.get_backend_device()->cmd_bind_descriptor_sets(resource,
+	device.get_backend_device()->cmd_bind_descriptors(resource,
 		has_compute_stage ? PipelineBindPoint::Compute : PipelineBindPoint::Gfx,
-		layout->get_resource(),
-		bound_descriptor_sets);
-}
+		Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource());
 
-void CommandList::set_descriptor(uint32_t in_set, uint32_t in_binding, const Descriptor& in_descriptor)
-{
-	descriptors[in_set][in_binding] = in_descriptor;
-	dirty_sets_mask = 1 << in_set;
+	pipeline_state_dirty = false;
 }
 
 void CommandList::set_depth_stencil_state(const PipelineDepthStencilStateCreateInfo& in_state)
@@ -189,5 +155,21 @@ void CommandList::bind_shader(const PipelineShaderStage& in_stage)
 			stages.emplace_back(in_stage);
 	}
 }
+
+void CommandList::push_constants(const ShaderStageFlags in_shader_stage_flags, 
+	const uint32_t in_offset, 
+	const uint32_t in_size, 
+	const void* in_data)
+{
+	ZE_CHECK(pipeline_layout);
+
+	device.get_backend_device()->cmd_push_constants(resource,
+		Device::cast_handle<PipelineLayout>(pipeline_layout)->get_resource(),
+		in_shader_stage_flags,
+		in_offset,
+		in_size,
+		in_data);
+}
+
 
 }

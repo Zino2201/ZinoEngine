@@ -4,7 +4,7 @@
 #include "Vulkan.hpp"
 #include "engine/gfx/vulkan_backend.hpp"
 #include <robin_hood.h>
-#include "vulkan_descriptor_set.hpp"
+#include "vulkan_descriptor_manager.hpp"
 #include "engine/containers/sparse_array.hpp"
 
 namespace ze::gfx
@@ -159,9 +159,11 @@ public:
 	void destroy_fence(const BackendDeviceResource& in_fence) override;
 	void destroy_pipeline_layout(const BackendDeviceResource& in_pipeline_layout) override;
 
-	Result<BackendDeviceResource, GfxResult> allocate_descriptor_set(const BackendDeviceResource& in_pipeline_layout,
-		const uint32_t in_set,
-		const std::span<Descriptor, max_bindings>& in_descriptors) override;
+	uint32_t get_buffer_srv_descriptor_index(const BackendDeviceResource& in_handle) override;
+	uint32_t get_buffer_uav_descriptor_index(const BackendDeviceResource& in_handle) override;
+	uint32_t get_texture_view_srv_descriptor_index(const BackendDeviceResource& in_handle) override;
+	uint32_t get_texture_view_uav_descriptor_index(const BackendDeviceResource& in_handle) override;
+	uint32_t get_sampler_srv_descriptor_index(const BackendDeviceResource& in_handle) override;
 
 	Result<void*, GfxResult> map_buffer(const BackendDeviceResource& in_buffer) override;
 	void unmap_buffer(const BackendDeviceResource& in_buffer) override;
@@ -193,10 +195,9 @@ public:
 		const int32_t in_vertex_offset,
 		const uint32_t in_first_instance) override;
 	void cmd_end_render_pass(const BackendDeviceResource& in_list) override;
-	void cmd_bind_descriptor_sets(const BackendDeviceResource in_list,
-		const PipelineBindPoint in_bind_point,
-		const BackendDeviceResource in_pipeline_layout, 
-		const std::span<BackendDeviceResource> in_descriptor_sets) override;
+	void cmd_bind_descriptors(const BackendDeviceResource in_list, 
+		const PipelineBindPoint in_bind_point, 
+		const BackendDeviceResource in_pipeline_layout) override;
 	void cmd_bind_vertex_buffers(const BackendDeviceResource& in_list, 
 		const uint32_t in_first_binding, 
 		const std::span<BackendDeviceResource> in_buffers, 
@@ -220,6 +221,12 @@ public:
 		const BackendDeviceResource in_dst_texture,
 		const TextureLayout in_dst_layout,
 		const std::span<BufferTextureCopyRegion>& in_copy_regions);
+	void cmd_push_constants(const BackendDeviceResource in_list, 
+		const BackendDeviceResource in_pipeline_layout, 
+		ShaderStageFlags in_stage_flags, 
+		const uint32_t in_offset, 
+		const uint32_t in_size, 
+		const void* in_data) override;
 
 	void end_cmd_list(const BackendDeviceResource& in_list) override;
 
@@ -245,20 +252,19 @@ public:
 		const std::span<BackendDeviceResource>& in_signal_semaphores = {},
 		const BackendDeviceResource& in_fence = null_backend_resource) override;
 
-	void free_descriptor_set_allocator(const size_t in_idx) { descriptor_set_allocators.remove(in_idx); }
-
 	[[nodiscard]] VulkanBackend& get_backend() const { return backend; }
 	[[nodiscard]] VkDevice get_device() const { return device_wrapper.device.device; }
 	[[nodiscard]] VkPhysicalDevice get_physical_device() const { return device_wrapper.device.physical_device.physical_device; }
 	[[nodiscard]] VmaAllocator get_allocator() const { return allocator; }
 	[[nodiscard]] VkQueue get_present_queue() { return device_wrapper.device.get_queue(vkb::QueueType::graphics).value(); }
+	[[nodiscard]] VulkanDescriptorManager& get_descriptor_manager() { return descriptor_manager; }
 private:
 	VulkanBackend& backend;
 	VmaAllocator allocator;
 	DeviceWrapper device_wrapper;
 	SurfaceManager surface_manager;
 	FramebufferManager framebuffer_manager;
-	SparseArray<VulkanDescriptorSetAllocator> descriptor_set_allocators;
+	VulkanDescriptorManager descriptor_manager;
 };
 	
 }

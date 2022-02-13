@@ -28,6 +28,8 @@ int main()
 
 	jobsystem::initialize();
 
+	load_module("Application");
+
 	{
 		Engine engine;
 		engine.run();

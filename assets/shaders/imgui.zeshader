@@ -1,5 +1,15 @@
 shader "ImGui"
 {
+	parameters
+	{
+		float2 translate;
+		float2 scale;
+		Texture2D texture;
+		SamplerState texture_sampler;
+	}
+
+	#include "core.hlsl"
+
 	struct VertexInput
 	{
 		float2 position : POSITION;
@@ -14,19 +24,23 @@ shader "ImGui"
 		float4 color : TEXCOORD1;
 	};
 
+	struct ShaderData
+    {
+		float2 translate;
+		float2 scale;
+        uint texture;
+        uint texture_sampler;
+    };
+
+    ZE_PUSH_CONSTANT ShaderData data;
+
 	vertex
 	{
-		cbuffer GlobalData : register(b0)
-		{
-			float2 translate;
-			float2 scale;
-		};
-
 		VertexOutput main(VertexInput input)
 		{
 			VertexOutput output;
 
-			output.position = float4(input.position * scale + translate, 0.0, 1.0);
+			output.position = float4(input.position * data.scale + data.translate, 0.0, 1.0);
 			output.texcoord = input.texcoord;
 			output.color = input.color;
 
@@ -36,12 +50,12 @@ shader "ImGui"
 
 	fragment
 	{
-		Texture2D texture : register(t2);
-		SamplerState texture_sampler : register(s1);
-
 		float4 main(VertexOutput input) : SV_TARGET0
 		{
-			return input.color * texture.Sample(texture_sampler, input.texcoord);
+			Texture2D texture = get_resource<Texture2D>(data.texture);
+			SamplerState sampler = get_resource<SamplerState>(data.texture_sampler);
+
+			return input.color * texture.Sample(sampler, input.texcoord);
 		}
 	}
 }

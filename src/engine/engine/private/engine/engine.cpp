@@ -185,14 +185,18 @@ void Engine::run()
 		glm::mat4 world;
 		glm::mat4 view;
 		glm::mat4 proj;
-		float time;
 		glm::vec3 sun_dir;
-		glm::vec3 cam_pos;
 		float _pad01;
+		glm::vec3 cam_pos;
+		float _pad02;
 		glm::vec3 view_dir;
+		float _pad03;
+		uint32_t texture;
+		uint32_t sampler;
+		uint32_t roughness;
+		uint32_t metallic;
+		uint32_t normal;
 	};
-	gfx::UniformBuffer<ubodata> wvp_ubo;
-	gfx::UniformBuffer<ubodata> sky_wvp;
 	gfx::UniqueBuffer vbo;
 	gfx::UniqueBuffer sky_vbo;
 
@@ -311,7 +315,7 @@ void Engine::run()
 
 	auto beebo_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		beebo.get(),
-		gfx::Format::R8G8B8A8Unorm)).get_value());
+		gfx::Format::R8G8B8A8Unorm).set_debug_name("Beebo View")).get_value());
 
 	int normal_texture_width = 0, normal_texture_height = 0;
 	stbi_uc* normal_texture_data = stbi_load("assets/Bricks075B_4K_NormalDX.jpg", &normal_texture_width, &normal_texture_height, nullptr, 4);
@@ -325,7 +329,7 @@ void Engine::run()
 
 	auto normal_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		normal_texture.get(),
-		gfx::Format::R8G8B8A8Unorm)).get_value());
+		gfx::Format::R8G8B8A8Unorm).set_debug_name("Normal View")).get_value());
 
 
 	auto beebo_sampler = gfx::UniqueSampler(device->create_sampler(gfx::SamplerInfo()).get_value());
@@ -344,7 +348,7 @@ void Engine::run()
 
 	auto roughness_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		roughness_texture.get(),
-		gfx::Format::R8G8B8A8Unorm)).get_value());
+		gfx::Format::R8G8B8A8Unorm).set_debug_name("Roughness View")).get_value());
 
 	stbi_image_free(noise_data);
 
@@ -359,7 +363,7 @@ void Engine::run()
 
 	auto metallic_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		metallic_texture.get(),
-		gfx::Format::R8G8B8A8Unorm)).get_value());
+		gfx::Format::R8G8B8A8Unorm).set_debug_name("Metallic View")).get_value());
 
 
 #if 0
@@ -394,7 +398,7 @@ void Engine::run()
 
 	auto sky_tex_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		sky_tex_noise.get(),
-		gfx::Format::R32G32B32A32Sfloat)).get_value());
+		gfx::Format::R32G32B32A32Sfloat).set_debug_name("Sky View")).get_value());
 
 	float i = 0;
 	float time = 0.f;
@@ -437,6 +441,8 @@ void Engine::run()
 		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Vertex, gfx::Device::get_backend_shader(*vertex_shader->second), "main");
 		shader_stages.emplace_back(gfx::ShaderStageFlagBits::Fragment, gfx::Device::get_backend_shader(*fragment_shader->second), "main");
 	}
+
+	gfx::StorageBuffer<ubodata> global_data;
 
 	while(running)
 	{
@@ -530,7 +536,6 @@ void Engine::run()
 		u.world = model;
 		u.view = view;
 		u.proj = proj;
-		u.time = time;
 		//u.sun_dir = glm::vec3(-0.901652, 0.356182, 0.245272);
 		u.sun_dir.x = 1.5f;// 1.0f + sin(time) * 5.f;
 		u.sun_dir.y = 0;//sin(time / 5.f) * 1.f;
@@ -538,12 +543,15 @@ void Engine::run()
 		//u.sun_dir = cam_pos;
 		u.cam_pos = cam_pos;
 		u.view_dir = fwd;
+		u.texture = gfx::get_device()->get_srv_descriptor_index(beebo_view.get());
+		u.sampler = gfx::get_device()->get_srv_descriptor_index(beebo_sampler.get());
+		u.roughness = gfx::get_device()->get_srv_descriptor_index(roughness_texture_view.get());
+		u.metallic = gfx::get_device()->get_srv_descriptor_index(metallic_texture_view.get());
+		u.normal = gfx::get_device()->get_srv_descriptor_index(normal_texture_view.get());
+		global_data.update(u);
 
-		wvp_ubo.update(u);
-
-		u.world = glm::scale(glm::mat4(1.f), glm::vec3(100.f)) *
+		glm::mat4 sky_world = glm::scale(glm::mat4(1.f), glm::vec3(100.f)) *
 			glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1, 0, 0));
-		sky_wvp.update(u);
 
 		ImGui::NewFrame();
 		ImGui::Text("%.0f FPS", 1.f / ImGui::GetIO().DeltaTime, ImGui::GetIO().DeltaTime);
@@ -591,24 +599,19 @@ void Engine::run()
 
 			/** Sky */
 			device->cmd_bind_vertex_buffer(list, sky_vbo.get(), 0);
+			sky_shader->set_parameter("wvp", proj * view * sky_world);
+			sky_shader->set_parameter("texture", sky_tex_view.get());
+			sky_shader->set_parameter("texture_sampler", beebo_sampler.get());
 			sky_shader->bind(list);
-			device->cmd_bind_ubo(list, 0, 0, sky_wvp.get_handle());
-			device->cmd_bind_texture_view(list, 0, 1, sky_tex_view.get());
-			device->cmd_bind_sampler(list, 0, 2, beebo_sampler.get());
-			device->cmd_bind_ssbo(list, 0, 3, test_ssbo.get());
 			device->cmd_draw(list, sky_positions.size(), 1, 0, 0);
 
+#if 1
 			/** Water */
 			device->cmd_bind_vertex_buffer(list, vbo.get(), 0);
+			mat_shader->set_parameter("global_data", global_data.get_handle());
 			mat_shader->bind(list);
-			device->cmd_bind_ubo(list, 0, 0, wvp_ubo.get_handle());
-			device->cmd_bind_texture_view(list, 0, 1, beebo_view.get());
-			device->cmd_bind_texture_view(list, 0, 3, roughness_texture_view.get());
-			device->cmd_bind_texture_view(list, 0, 4, metallic_texture_view.get());
-			device->cmd_bind_texture_view(list, 0, 5, normal_texture_view.get());
-			device->cmd_bind_texture_view(list, 0, 6, sky_tex_view.get());
-			device->cmd_bind_sampler(list, 0, 2, beebo_sampler.get());
 			device->cmd_draw(list, positions.size(), 1, 0, 0);
+#endif
 
 			device->cmd_end_render_pass(list);
 
@@ -662,7 +665,7 @@ void Engine::create_swapchain(const gfx::UniqueSwapchain& old_swapchain)
 			gfx::TextureUsageFlagBits::DepthStencilAttachment))).get_value());
 
 	depth_buffer_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_depth(
-		depth_buffer.get(), gfx::Format::D24UnormS8Uint)).get_value());
+		depth_buffer.get(), gfx::Format::D24UnormS8Uint).set_debug_name("Depth Stencil View")).get_value());
 
 	base_pass_texture = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo(
 		gfx::TextureCreateInfo(
