@@ -63,11 +63,12 @@ void ShaderInstance::bind(gfx::CommandListHandle in_handle)
 
 	get_device()->cmd_bind_pipeline_layout(in_handle, permutation.get_pipeline_layout());
 
-	get_device()->cmd_push_constants(in_handle, 
-		permutation.get_shader_stage_flags(), 
-		0, 
-		permutation.get_parameters_size(), 
-		push_constant_data.data());
+	if(permutation.get_parameters_size() > 0)
+		get_device()->cmd_push_constants(in_handle, 
+			permutation.get_shader_stage_flags(), 
+			0, 
+			permutation.get_parameters_size(), 
+			push_constant_data.data());
 
 	for (const auto& [stage, shader] : permutation.get_shader_map())
 		get_device()->cmd_bind_shader(in_handle, { stage, Device::get_backend_shader(*shader), "main" });

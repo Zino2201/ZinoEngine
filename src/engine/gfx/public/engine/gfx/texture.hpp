@@ -38,7 +38,7 @@ enum class TextureLayout
 	General,
 	ColorAttachment,
 	DepthStencilAttachment,
-	DepthReadOnly,
+	DepthStencilReadOnly,
 	ShaderReadOnly,
 	TransferSrc,
 	TransferDst,
@@ -52,7 +52,8 @@ enum class TextureUsageFlagBits
 	Sampled = 1 << 2,
 	TransferSrc = 1 << 3,
 	TransferDst = 1 << 4,
-	Cube = 1 << 5
+	Cube = 1 << 5,
+	//InputAttachment = 1 << 6,
 };
 ZE_ENABLE_FLAG_ENUMS(TextureUsageFlagBits, TextureUsageFlags);
 	
@@ -138,6 +139,20 @@ struct TextureCreateInfo
 		format(in_format), width(in_width), height(in_height), depth(in_depth),
 		mip_levels(in_mip_levels), array_layers(in_array_layers), sample_count(in_sample_count),
 		usage_flags(in_usage_flags) {}
+
+	bool operator==(const TextureCreateInfo& in_other) const
+	{
+		return type == in_other.type &&
+			mem_usage == in_other.mem_usage &&
+			format == in_other.format &&
+			width == in_other.width &&
+			height == in_other.height &&
+			depth == in_other.depth &&
+			mip_levels == in_other.mip_levels &&
+			array_layers == in_other.array_layers &&
+			sample_count == in_other.sample_count &&
+			usage_flags == in_other.usage_flags;
+	}
 };
 
 struct TextureViewCreateInfo

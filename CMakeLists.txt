@@ -40,7 +40,7 @@ macro(ze_add_module TARGET)
         LIBRARY_OUTPUT_DIRECTORY "${ZE_BIN_DIR}"
         RUNTIME_OUTPUT_DIRECTORY "${ZE_BIN_DIR}"
         PREFIX "${ZE_MODULE_PREFIX}"
-        UNITY_BUILD ON
+        UNITY_BUILD OFF
         DEFINE_SYMBOL "")
 
     if(ZE_WITH_SANITIZERS)

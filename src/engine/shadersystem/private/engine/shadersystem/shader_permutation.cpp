@@ -2,13 +2,14 @@
 #include "engine/shadercompiler/shader_compiler.hpp"
 #include "engine/jobsystem/job.hpp"
 #include "engine/jobsystem/job_group.hpp"
+#include "engine/shadersystem/shader_manager.hpp"
 #include "tbb/concurrent_hash_map.h"
 
 namespace ze::shadersystem
 {
 
 ShaderPermutation::ShaderPermutation(Shader& in_shader, ShaderPermutationId in_id)
-	: shader(in_shader), id(in_id), state(ShaderPermutationState::Unavailable)
+	: shader(in_shader), id(in_id), state(ShaderPermutationState::Unavailable), parameters_size(0)
 {
 
 }
@@ -135,17 +136,24 @@ void ShaderPermutation::compile()
 			};
 			
 			std::array set_layouts = { gfx::DescriptorSetLayoutCreateInfo(bindings) };
-			std::array push_constant_ranges = { push_constant_range };
-			auto result = gfx::get_device()->create_pipeline_layout(gfx::PipelineLayoutInfo({ set_layouts, push_constant_ranges }));
+			std::vector<gfx::PushConstantRange> push_constant_ranges;
+			if (parameters_size > 0)
+				push_constant_ranges.emplace_back(push_constant_range);
+
+			auto result = gfx::get_device()->create_pipeline_layout(
+				gfx::PipelineLayoutInfo({ set_layouts, push_constant_ranges }));
 			if (result)
+			{
 				pipeline_layout = gfx::UniquePipelineLayout(result.get_value());
+				state = ShaderPermutationState::Available;
+			}
 			else
+			{
 				logger::fatal(log_shadersystem, "Failed to create pipeline layout for shader {} (permutation: {}): {}",
 					shader.get_declaration().name,
 					id.options.to_ullong(),
-					"error");
-
-			state = ShaderPermutationState::Available;
+					std::to_string(result.get_error()));
+			}
 		}
 	},
 	jobsystem::JobType::Normal, 0.f);

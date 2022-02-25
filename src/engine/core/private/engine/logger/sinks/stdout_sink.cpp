@@ -1,6 +1,7 @@
 #include "engine/logger/sinks/stdout_sink.hpp"
 #include <iostream>
-#include "engine/logger/Logger.hpp"
+#include "engine/logger/logger.hpp"
+#include "engine/platform_macros.hpp"
 #if ZE_PLATFORM(WINDOWS)
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>

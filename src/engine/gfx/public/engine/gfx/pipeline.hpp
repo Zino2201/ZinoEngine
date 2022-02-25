@@ -106,8 +106,8 @@ enum class AccessFlagBits
 	ColorAttachmentWrite = 1 << 9,
 	DepthStencilAttachmentRead = 1 << 10,
 	DepthStencilAttachmentWrite = 1 << 11,
-	InputAttachmentRead = 1 << 11,
-	UniformRead = 1 << 12,
+	InputAttachmentRead = 1 << 12,
+	UniformRead = 1 << 13,
 };
 ZE_ENABLE_FLAG_ENUMS(AccessFlagBits, AccessFlags);
 

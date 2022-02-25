@@ -1,4 +1,5 @@
 #include "engine/application/windows/window.hpp"
+#include "engine/application/windows/application.hpp"
 #include <boost/locale.hpp>
 
 namespace ze::platform

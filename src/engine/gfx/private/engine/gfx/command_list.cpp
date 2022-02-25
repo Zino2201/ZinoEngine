@@ -19,8 +19,7 @@ void CommandList::reset()
 	pipeline_layout = PipelineLayoutHandle();
 	render_pass = null_backend_resource;
 
-	static std::array default_blend_attachment_states = { PipelineColorBlendAttachmentState() };
-	color_blend_state = { false, LogicOp::NoOp, default_blend_attachment_states };
+	color_blend_state = { false, LogicOp::NoOp, {} };
 	depth_stencil_state = {};
 	multisampling_state = {};
 	vertex_input_state = {};

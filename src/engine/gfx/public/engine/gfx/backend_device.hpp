@@ -15,6 +15,7 @@
 #include "sync.hpp"
 #include "sampler.hpp"
 #include "pipeline_layout.hpp"
+#include "glm/vec4.hpp"
 
 namespace ze::gfx
 {
@@ -98,6 +99,9 @@ public:
 	[[nodiscard]] virtual uint32_t get_sampler_srv_descriptor_index(const BackendDeviceResource& in_handle) = 0;
 
 	/** Commands */
+	virtual void cmd_begin_region(const BackendDeviceResource& in_list, const std::string_view& in_name, const glm::vec4& in_color) = 0;
+	virtual void cmd_end_region(const BackendDeviceResource& in_list) = 0;
+
 	virtual void begin_cmd_list(const BackendDeviceResource& in_list) = 0;
 	virtual void cmd_begin_render_pass(const BackendDeviceResource& in_list,
 		const BackendDeviceResource& in_render_pass,

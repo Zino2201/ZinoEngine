@@ -37,7 +37,7 @@ std::string severity_to_string(SeverityFlagBits in_severity)
 	}
 }
 
-inline std::string format_message(const std::string& in_pattern, const Message& in_message)
+std::string format_message(const std::string& in_pattern, const Message& in_message)
 {
 	const std::time_t time = std::chrono::system_clock::to_time_t(in_message.time);
 

@@ -1,9 +1,12 @@
 #pragma once
 
+#include "vulkan.hpp"
 #include <queue>
 
 namespace ze::gfx
 {
+
+class VulkanDevice;
 
 class VulkanDescriptorManager
 {
@@ -55,7 +58,7 @@ public:
 	void free_index(DescriptorIndexHandle in_handle);
 
 	void update_descriptor(DescriptorIndexHandle in_index, VkBuffer in_buffer, VkDescriptorType in_type);
-	void update_descriptor(DescriptorIndexHandle in_index, VkImageViewType in_type, VkImageView in_view);
+	void update_descriptor(DescriptorIndexHandle in_index, VkImageViewType in_type, VkImageView in_view, VkImageLayout in_image_layout);
 	void update_descriptor(DescriptorIndexHandle in_index, VkSampler in_sampler);
 	void flush_updates();
 	void bind_descriptors(VkCommandBuffer in_buffer, const VkPipelineBindPoint in_bind_point, VkPipelineLayout in_layout);
@@ -89,6 +92,7 @@ private:
 		DescriptorIndexHandle index;
 		VkImageViewType texture_type;
 		VkImageView texture;
+		VkImageLayout layout;
 	};
 
 	struct SamplerUpdate

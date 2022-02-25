@@ -1,5 +1,8 @@
 #include "engine/jobsystem/job.hpp"
+#include "engine/jobsystem/jobsystem.hpp"
+#include "engine/jobsystem/worker_thread.hpp"
 #include <deque>
+#include "engine/debug/assertions.hpp"
 #include "engine/util/simple_pool.hpp"
 
 namespace ze::jobsystem

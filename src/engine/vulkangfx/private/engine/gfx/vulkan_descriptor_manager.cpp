@@ -1,4 +1,5 @@
 #include "vulkan_descriptor_manager.hpp"
+#include "vulkan_device.hpp"
 #include "engine/gfx/pipeline_layout.hpp"
 
 namespace ze::gfx
@@ -128,9 +129,9 @@ void VulkanDescriptorManager::update_descriptor(DescriptorIndexHandle in_index, 
 	buffer_updates.push_back({ in_index, in_buffer, in_type });
 }
 
-void VulkanDescriptorManager::update_descriptor(DescriptorIndexHandle in_index, VkImageViewType in_type, VkImageView in_view)
+void VulkanDescriptorManager::update_descriptor(DescriptorIndexHandle in_index, VkImageViewType in_type, VkImageView in_view, VkImageLayout in_image_layout)
 {
-	texture_updates.push_back({ in_index, in_type, in_view });
+	texture_updates.push_back({ in_index, in_type, in_view, in_image_layout });
 }
 
 void VulkanDescriptorManager::update_descriptor(DescriptorIndexHandle in_index, VkSampler in_sampler)
@@ -172,7 +173,7 @@ void VulkanDescriptorManager::flush_updates()
 		{
 			auto& info = infos.emplace_back(VkDescriptorImageInfo{ VK_NULL_HANDLE,
 				update.texture,
-				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL });
+				update.layout });
 
 			uint32_t binding = srv_texture_2D_binding;
 			if (update.texture_type == VK_IMAGE_VIEW_TYPE_CUBE)

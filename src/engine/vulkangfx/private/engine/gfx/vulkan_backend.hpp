@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/gfx/backend.hpp"
+#include "vulkan.hpp"
 
 namespace ze::gfx
 {

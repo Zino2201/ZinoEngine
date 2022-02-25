@@ -37,6 +37,8 @@ private:
 	std::unique_ptr<gfx::Device> device;
 	std::unique_ptr<shadersystem::ShaderManager> shader_manager;
 	gfx::UniqueSwapchain swapchain;
+	gfx::UniqueSemaphore image_available_semaphore;
+	gfx::UniqueSemaphore render_finished_semaphore;
 	gfx::UniqueTexture depth_buffer;
 	gfx::UniqueTextureView depth_buffer_view;
 	gfx::UniqueTexture base_pass_texture;

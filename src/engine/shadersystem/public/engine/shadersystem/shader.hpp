@@ -8,6 +8,8 @@
 namespace ze::shadersystem
 {
 
+ZE_DEFINE_LOG_CATEGORY(shadersystem);
+
 class Shader;
 class ShaderInstance;
 class ShaderManager;

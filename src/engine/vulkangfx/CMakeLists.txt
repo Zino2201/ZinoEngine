@@ -1,7 +1,7 @@
 find_package(Vulkan REQUIRED)
 find_package(unofficial-vulkan-memory-allocator CONFIG REQUIRED)
 
-ze_add_module(vulkangfx 
+ze_add_module(vulkangfx
 	public/engine/gfx/vulkan_backend_module.hpp
 	private/engine/gfx/vulkan_backend.hpp
 	private/engine/gfx/vulkan.hpp

@@ -98,38 +98,6 @@ struct Descriptor
 	Descriptor() : type(DescriptorType::UniformBuffer),
 		binding(0),
 		info(std::monostate{}) {}
-
-	static Descriptor make_buffer_info(DescriptorType in_type,
-		const uint32_t in_binding, 
-		const BackendDeviceResource in_handle)
-	{
-		Descriptor descriptor;
-		descriptor.type = in_type;
-		descriptor.binding = in_binding;
-		descriptor.info = DescriptorBufferInfo(in_handle, 0, std::numeric_limits<uint64_t>::max());
-		return descriptor;
-	}
-
-	static Descriptor make_texture_view_info(const uint32_t in_binding,
-		const BackendDeviceResource in_view)
-	{
-		Descriptor descriptor;
-		descriptor.type = DescriptorType::SampledTexture;
-		descriptor.binding = in_binding;
-		descriptor.info = DescriptorTextureInfo(in_view,
-			TextureLayout::ShaderReadOnly);
-		return descriptor;
-	}
-
-	static Descriptor make_sampler_info(const uint32_t in_binding,
-		const BackendDeviceResource in_sampler)
-	{
-		Descriptor descriptor;
-		descriptor.type = DescriptorType::Sampler;
-		descriptor.binding = in_binding;
-		descriptor.info = DescriptorSamplerInfo(in_sampler);
-		return descriptor;
-	}
 };
 
 struct PipelineLayoutCreateInfo

@@ -57,6 +57,9 @@ enum class Format
     /** R 64-bit (unsigned int) */
     R64Uint,
 
+    /** Exotic formats */
+    R10G10B10A2Unorm,
+
     /** BC1/DXT1 */
     Bc1RgbUnormBlock,
     Bc1RgbaUnormBlock,

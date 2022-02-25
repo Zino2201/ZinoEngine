@@ -73,8 +73,8 @@ inline VkImageLayout convert_texture_layout(const TextureLayout& in_layout)
 		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 	case TextureLayout::ShaderReadOnly:
 		return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	case TextureLayout::DepthReadOnly:
-		return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
+	case TextureLayout::DepthStencilReadOnly:
+		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 	case TextureLayout::TransferSrc:
 		return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 	case TextureLayout::TransferDst:

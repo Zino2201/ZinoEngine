@@ -1,7 +1,7 @@
 #pragma once
 
 #include "engine/gfx/backend_device.hpp"
-#include "Vulkan.hpp"
+#include "vulkan.hpp"
 #include "engine/gfx/vulkan_backend.hpp"
 #include <robin_hood.h>
 #include "vulkan_descriptor_manager.hpp"
@@ -172,7 +172,9 @@ public:
 		const uint32_t in_count) override;
 	void free_command_lists(const BackendDeviceResource& in_pool, const std::vector<BackendDeviceResource>& in_lists) override;
 	void reset_command_pool(const BackendDeviceResource& in_pool) override;
-	
+
+	void cmd_begin_region(const BackendDeviceResource& in_list, const std::string_view& in_name, const glm::vec4& in_color) override;
+	void cmd_end_region(const BackendDeviceResource& in_list) override;
 	void begin_cmd_list(const BackendDeviceResource& in_list) override;
 	void cmd_begin_render_pass(const BackendDeviceResource& in_list,
 		const BackendDeviceResource& in_render_pass,
@@ -265,6 +267,8 @@ private:
 	SurfaceManager surface_manager;
 	FramebufferManager framebuffer_manager;
 	VulkanDescriptorManager descriptor_manager;
+	PFN_vkCmdBeginDebugUtilsLabelEXT vkCmdBeginDebugUtilsLabelEXT;
+	PFN_vkCmdEndDebugUtilsLabelEXT vkCmdEndDebugUtilsLabelEXT;
 };
 	
 }

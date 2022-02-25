@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/result.hpp"
+#include "engine/shadersystem/shader_declaration.hpp"
 
 namespace ze::shadersystem
 {

@@ -5,8 +5,8 @@
 #include "engine/shadersystem/shader_manager.hpp"
 #include "engine/application/application_module.hpp"
 #include "engine/application/platform_application.hpp"
-#include "engine/module/module_manager.hpp"
 #include "engine/gfx/rendergraph/render_graph.hpp"
+#include "engine/module/module_manager.hpp"
 
 namespace ze::imgui
 {
@@ -183,27 +183,33 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 		swap_buffers(viewport);
 	};
 
-	platform_io.Renderer_RenderWindow = [](ImGuiViewport* viewport, void*)
+	platform_io.Renderer_RenderWindow = [](ImGuiViewport* viewport, void* in_user_data)
 	{
 		auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
+		if (!renderer_data)
+			return;
+
 		renderer_data->has_submitted_work = false;
 
-		const auto list = get_device()->allocate_cmd_list(QueueType::Gfx);
+		rendergraph::RenderGraph render_graph(renderer_data->resource_registry);
 
-		if (get_device()->acquire_swapchain_texture(renderer_data->window.get_swapchain(),
+		auto list = get_device()->allocate_cmd_list(QueueType::Gfx);
+
+		if (get_device()->acquire_swapchain_texture(renderer_data->window.get_swapchain(), 
 			renderer_data->image_available_semaphore.get()) == GfxResult::Success)
-		{
-			rendergraph::RenderGraph render_graph(renderer_data->registry);
 			draw_viewport(viewport, render_graph);
 
-			std::array wait_semaphores = { renderer_data->image_available_semaphore.get() };
-			std::array signal_semaphores = { renderer_data->render_finished_semaphore.get() };
-			get_device()->submit(list, wait_semaphores, signal_semaphores);
-			render_graph.set_backbuffer_attachment("backbuffer",
-				get_device()->get_swapchain_backbuffer_view(renderer_data->window.get_swapchain()),
-				viewport->Size.x,
-				viewport->Size.y);
-		}
+		render_graph.set_backbuffer_attachment("backbuffer",
+			get_device()->get_swapchain_backbuffer_view(renderer_data->window.get_swapchain()),
+			viewport->WorkSize.x,
+			viewport->WorkSize.y);
+
+		render_graph.compile();
+		render_graph.execute(list);
+
+		std::array wait_semaphores = { renderer_data->image_available_semaphore.get() };
+		std::array signal_semaphores = { renderer_data->render_finished_semaphore.get() };
+		get_device()->submit(list, wait_semaphores, signal_semaphores);
 	};
 
 	io.Fonts->AddFontFromFileTTF("assets/fonts/ReadexPro-Light.ttf", 18.f);
@@ -319,11 +325,8 @@ void new_frame(float in_delta_time, platform::Window& in_main_window)
 		update_mouse_cursor();
 	}
 
-	/** Acquire main window image as soon as possible */
-	{
-		auto* renderer_data = static_cast<ViewportRendererData*>(ImGui::GetMainViewport()->RendererUserData);
-		renderer_data->has_submitted_work = false;
-	}
+	auto* renderer_data = static_cast<ViewportRendererData*>(ImGui::GetMainViewport()->RendererUserData);
+	renderer_data->has_submitted_work = false;
 }
 
 void update_mouse_cursor()
@@ -344,7 +347,7 @@ void update_mouse_cursor()
 	}
 }
 
-void draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_render_graph)
+void draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& render_graph)
 {
 	auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
 	auto update_viewport_buffers = [&](ImDrawData* draw_data, ViewportDrawData& vp_draw_data)
@@ -415,37 +418,16 @@ void draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_re
 
 	update_viewport_buffers(viewport->DrawData, renderer_data->draw_data);
 
-	std::array clear_values = { ClearValue(ClearColorValue({0, 0, 0, 1})),
-			ClearValue(ClearDepthStencilValue(1.f, 0)) };
-	std::array color_attachments = { get_device()->get_swapchain_backbuffer_view(renderer_data->window.get_swapchain()) };
-	RenderPassInfo render_pass_info;
-	render_pass_info.render_area = Rect2D(0, 0, 
-		static_cast<uint32_t>(viewport->Size.x), static_cast<uint32_t>(viewport->Size.y));
-	render_pass_info.color_attachments = color_attachments;
-
-	if(viewport == ImGui::GetMainViewport())
-		render_pass_info.load_attachment_flags = 1 << 0;
-	else
-		render_pass_info.clear_attachment_flags = 1 << 0;
-	render_pass_info.store_attachment_flags = 1 << 0;
-	render_pass_info.clear_values = clear_values;
-
-	std::array color_attachments_refs = { 0Ui32 };
-	std::array subpasses = { RenderPassInfo::Subpass(color_attachments_refs,
-		{},
-		{},
-		RenderPassInfo::DepthStencilMode::ReadOnly) };
-	render_pass_info.subpasses = subpasses;
-
-	in_render_graph.add_gfx_pass("ImGui",
+	render_graph.add_gfx_pass("ImGui",
 		[&](rendergraph::RenderPass& render_pass)
 		{
-			render_pass.add_color_input("backbuffer");
+			if(viewport == ImGui::GetMainViewport())
+				render_pass.add_color_input("backbuffer");
+
 			render_pass.add_color_output("backbuffer", {});
 		},
-		[&](CommandListHandle list)
+		[viewport, renderer_data](CommandListHandle list)
 		{
-			get_device()->cmd_set_depth_stencil_state(list, {});
 			get_device()->cmd_bind_pipeline_layout(list, shader_instance->get_permutation().get_pipeline_layout());
 			get_device()->cmd_set_vertex_input_state(list, vertex_input_state);
 			get_device()->cmd_bind_shader(list, shader_stages[0]);
@@ -522,8 +504,6 @@ void swap_buffers(ImGuiViewport* viewport)
 
 void draw_viewports(gfx::rendergraph::RenderGraph& in_render_graph)
 {
-	draw_viewport(ImGui::GetMainViewport(), in_render_graph);
-
 	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
 	for(int i = 1; i < platform_io.Viewports.Size; i++)
 	{
@@ -533,6 +513,8 @@ void draw_viewports(gfx::rendergraph::RenderGraph& in_render_graph)
 
 		platform_io.Renderer_RenderWindow(viewport, nullptr);
 	}
+
+	draw_viewport(ImGui::GetMainViewport(), in_render_graph);
 }
 
 void present_viewports()

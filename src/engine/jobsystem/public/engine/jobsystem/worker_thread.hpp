@@ -12,10 +12,7 @@ class WorkerThread
 {
 	struct JobCompare
 	{
-		bool operator()(const Job* left, const Job* right) const
-		{
-			return left->get_priority() < right->get_priority();
-		}
+		bool operator()(const Job* left, const Job* right) const;
 	};
 
 public:

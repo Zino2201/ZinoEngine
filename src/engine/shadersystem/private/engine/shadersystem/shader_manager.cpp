@@ -7,8 +7,6 @@
 namespace ze::shadersystem
 {
 
-ZE_DEFINE_LOG_CATEGORY(shadersystem);
-
 ShaderManager::ShaderManager(gfx::Device& in_device) : device(in_device) {}
 ShaderManager::~ShaderManager() = default;
 

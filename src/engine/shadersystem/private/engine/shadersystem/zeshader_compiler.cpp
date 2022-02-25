@@ -1,4 +1,5 @@
 #include "zeshader_compiler.hpp"
+#include "engine/shadersystem/shader_declaration.hpp"
 #include <stack>
 
 namespace ze::shadersystem
@@ -95,7 +96,8 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 
 						if (c == '"')
 							break;
-						else if (c == '\n')
+
+						if (c == '\n')
 							return make_error(std::string("Can't properly parse shader name. Excepted syntax: 'shader \"Name\"'"));
 
 						declaration.name.push_back(c);

@@ -292,7 +292,7 @@ inline VkPipelineStageFlags convert_pipeline_stage_flags(const PipelineStageFlag
 		flags |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
 	
 	if(in_flags & PipelineStageFlagBits::EarlyFragmentTests)
-		flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		flags |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 	
 	if(in_flags & PipelineStageFlagBits::FragmentShader)
 		flags |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;

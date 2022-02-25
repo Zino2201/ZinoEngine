@@ -44,7 +44,6 @@ VkFramebuffer VulkanDevice::FramebufferManager::get_or_create(VkRenderPass in_re
 	create_info.pNext = nullptr;
 	create_info.flags = 0;
 	create_info.renderPass = in_render_pass;
-	create_info.attachmentCount = static_cast<uint32_t>(in_framebuffer.attachments.size());
 	create_info.width = in_framebuffer.width;
 	create_info.height = in_framebuffer.height;
 	create_info.layers = 1;
@@ -88,6 +87,11 @@ VulkanDevice::VulkanDevice(VulkanBackend& in_backend, vkb::Device&& in_device) :
 		if (result != VK_SUCCESS)
 			logger::fatal(log_vulkan, "Failed to create memory allocator");
 	}
+
+	vkCmdBeginDebugUtilsLabelEXT = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
+		vkGetDeviceProcAddr(get_device(), "vkCmdBeginDebugUtilsLabelEXT"));
+	vkCmdEndDebugUtilsLabelEXT = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
+		vkGetDeviceProcAddr(get_device(), "vkCmdEndDebugUtilsLabelEXT"));
 }
 	
 VulkanDevice::~VulkanDevice()
@@ -570,6 +574,7 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_render_pass(const 
 	
 	create_info.subpassCount = static_cast<uint32_t>(subpasses.size());
 	create_info.pSubpasses = subpasses.data();
+
 	create_info.dependencyCount = 0;
 	create_info.pDependencies = nullptr;
 
@@ -642,6 +647,9 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture(const Text
 	if(in_create_info.usage_flags & TextureUsageFlagBits::TransferDst)
 		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
+	//if (in_create_info.usage_flags & TextureUsageFlagBits::InputAttachment)
+	//	create_info.usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+
 	if (in_create_info.usage_flags & TextureUsageFlagBits::Cube)
 		create_info.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 
@@ -690,7 +698,8 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture_view(const
 	VulkanDescriptorManager::DescriptorIndexHandle srv_index;
 	VulkanDescriptorManager::DescriptorIndexHandle uav_index;
 
-	if (get_resource<VulkanTexture>(in_create_info.texture)->get_image_usage_flags() & VK_IMAGE_USAGE_SAMPLED_BIT)
+	const auto* texture = get_resource<VulkanTexture>(in_create_info.texture);
+	if (texture->get_image_usage_flags() & VK_IMAGE_USAGE_SAMPLED_BIT)
 	{
 		if (in_create_info.type == TextureViewType::Tex2D)
 		{
@@ -703,8 +712,9 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture_view(const
 			uav_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::TextureCube, true);
 		}
 
-		descriptor_manager.update_descriptor(srv_index, create_info.viewType, view);
-		descriptor_manager.update_descriptor(uav_index, create_info.viewType, view);
+		VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		descriptor_manager.update_descriptor(srv_index, create_info.viewType, view, layout);
+		descriptor_manager.update_descriptor(uav_index, create_info.viewType, view, layout);
 	}
 
 	auto ret = new_resource<VulkanTextureView>(*this, view, srv_index, uav_index);
@@ -1056,6 +1066,26 @@ void VulkanDevice::reset_fences(const std::span<BackendDeviceResource>& in_fence
 }
 
 /** Commands */
+
+void VulkanDevice::cmd_begin_region(const BackendDeviceResource& in_list, const std::string_view& in_name, const glm::vec4& in_color)
+{
+	VkDebugUtilsLabelEXT label = {};
+	label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+	label.pLabelName = in_name.data();
+	label.color[0] = in_color.r;
+	label.color[1] = in_color.g;
+	label.color[2] = in_color.b;
+	label.color[3] = in_color.a;
+
+	vkCmdBeginDebugUtilsLabelEXT(get_resource<VulkanCommandList>(in_list)->get_command_buffer(),
+		&label);
+}
+
+void VulkanDevice::cmd_end_region(const BackendDeviceResource& in_list)
+{
+	vkCmdEndDebugUtilsLabelEXT(get_resource<VulkanCommandList>(in_list)->get_command_buffer());
+}
+
 void VulkanDevice::begin_cmd_list(const BackendDeviceResource& in_list)
 {
 	VkCommandBufferBeginInfo begin_info = {};

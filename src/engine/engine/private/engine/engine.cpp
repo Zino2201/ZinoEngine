@@ -18,6 +18,10 @@
 #include "engine/materialsystem/material_compiler.hpp"
 #include "engine/gfx/utils/scatter_upload_buffer.hpp"
 #include "engine/gfx/utils/gfx_utils_module.hpp"
+#include "engine/gfx/rendergraph/render_graph.hpp"
+#include "engine/gfx/rendergraph/resource_registry.hpp"
+#include "engine/gfx/uniform_buffer.hpp"
+#include "engine/gfx/utils/fullscreen_quad.hpp"
 
 namespace ze
 {
@@ -46,6 +50,9 @@ Engine::Engine() : running(true)
 
 	auto gfx_utils_module = get_module<gfx::GfxUtilsModule>("gfxutils");
 	gfx_utils_module->initialize_shaders(*shader_manager);
+
+	image_available_semaphore = gfx::UniqueSemaphore(device->create_semaphore({}).get_value());
+	render_finished_semaphore = gfx::UniqueSemaphore(device->create_semaphore({}).get_value());
 }
 
 Engine::~Engine() = default;
@@ -196,6 +203,8 @@ void Engine::run()
 		uint32_t roughness;
 		uint32_t metallic;
 		uint32_t normal;
+		float near;
+		float far;
 	};
 	gfx::UniqueBuffer vbo;
 	gfx::UniqueBuffer sky_vbo;
@@ -432,9 +441,11 @@ void Engine::run()
 		}
 	}
 
-	std::unique_ptr<shadersystem::ShaderInstance> mat_shader = material->get_shader()->instantiate({});
+	std::unique_ptr<shadersystem::ShaderInstance> mat_shader_gbuffer = material->get_shader()->instantiate({ "gbuffer" });
+	std::unique_ptr<shadersystem::ShaderInstance> deferred_lighting = shader_manager->get_shader("DeferredLighting")->instantiate({});
 	{
-		const auto& shader_map = mat_shader->get_permutation().get_shader_map();
+		deferred_lighting->get_permutation().get_shader_map();
+		const auto& shader_map = mat_shader_gbuffer->get_permutation().get_shader_map();
 		ZE_CHECKF(shader_map.size() == 2, "Failed to compile shader");
 		auto vertex_shader = shader_map.find(gfx::ShaderStageFlagBits::Vertex);
 		auto fragment_shader = shader_map.find(gfx::ShaderStageFlagBits::Fragment);
@@ -528,7 +539,7 @@ void Engine::run()
 		glm::mat4 proj = glm::perspective(glm::radians(90.f),
 			(float)main_window->get_width() / main_window->get_height(),
 			0.01f,
-			100000.f);
+			100.f);
 		proj[1][1] *= -1;
 
 		time += delta_time;
@@ -548,6 +559,8 @@ void Engine::run()
 		u.roughness = gfx::get_device()->get_srv_descriptor_index(roughness_texture_view.get());
 		u.metallic = gfx::get_device()->get_srv_descriptor_index(metallic_texture_view.get());
 		u.normal = gfx::get_device()->get_srv_descriptor_index(normal_texture_view.get());
+		u.near = 0.01f;
+		u.far = 100.f;
 		global_data.update(u);
 
 		glm::mat4 sky_world = glm::scale(glm::mat4(1.f), glm::vec3(100.f)) *
@@ -566,65 +579,116 @@ void Engine::run()
 		ImGui::ShowDemoWindow();
 		ImGui::Render();
 
-		if(true) {
-			using namespace gfx;
-			const auto list = device->allocate_cmd_list(gfx::QueueType::Gfx);
-			std::array clear_values = { ClearValue(ClearColorValue({0, 0, 0, 1})),
-				ClearValue(ClearColorValue({0, 0, 0, 1})), ClearValue(ClearDepthStencilValue(1.f, 0)) };
-			std::array color_attachments = { get_device()->get_swapchain_backbuffer_view(swapchain.get()),
-				base_pass_texture_view.get() };
-			RenderPassInfo render_pass_info;
-			render_pass_info.render_area = Rect2D(0, 0,
-				static_cast<uint32_t>(main_window->get_width()), static_cast<uint32_t>(main_window->get_height()));
-			render_pass_info.depth_stencil_attachment = depth_buffer_view.get();
-			render_pass_info.color_attachments = color_attachments;
-			render_pass_info.clear_attachment_flags = 1 << 0;
-			render_pass_info.store_attachment_flags = 1 << 0;
-			render_pass_info.clear_values = clear_values;
+		using namespace gfx;
+		static std::array<rendergraph::PhysicalResourceRegistry, Device::max_frames_in_flight> registry;
+		rendergraph::RenderGraph render_graph(registry[get_device()->get_current_frame_idx()]);
 
-			std::array color_attachments_refs = { 1Ui32 };
-			std::array resolve_attachments_refs = { 0Ui32 };
-			std::array subpasses = { RenderPassInfo::Subpass(color_attachments_refs,
-				{},
-				resolve_attachments_refs,
-				RenderPassInfo::DepthStencilMode::ReadWrite) };
-			render_pass_info.subpasses = subpasses;
+		if (get_device()->acquire_swapchain_texture(swapchain.get(), image_available_semaphore.get()) != GfxResult::Success)
+			continue;
 
-
-			device->cmd_begin_render_pass(list, render_pass_info);
-
+		auto render_scene = [&](CommandListHandle list, shadersystem::ShaderInstance* shader)
+		{
 			device->cmd_set_vertex_input_state(list, vertex_input);
-			device->cmd_set_multisampling_state(list, { SampleCountFlagBits::Count8 });
+			device->cmd_set_multisampling_state(list, { SampleCountFlagBits::Count1 });
 			device->cmd_set_depth_stencil_state(list, { true, true, CompareOp::Less });
 
-			/** Sky */
-			device->cmd_bind_vertex_buffer(list, sky_vbo.get(), 0);
-			sky_shader->set_parameter("wvp", proj * view * sky_world);
-			sky_shader->set_parameter("texture", sky_tex_view.get());
-			sky_shader->set_parameter("texture_sampler", beebo_sampler.get());
-			sky_shader->bind(list);
-			device->cmd_draw(list, sky_positions.size(), 1, 0, 0);
+			static std::array attachment_states =
+			{
+				PipelineColorBlendAttachmentState {},
+				PipelineColorBlendAttachmentState {},
+				PipelineColorBlendAttachmentState {},
+				PipelineColorBlendAttachmentState {},
+			};
+			device->cmd_set_color_blend_state(list, { false, LogicOp::NoOp, attachment_states });
 
-#if 1
-			/** Water */
 			device->cmd_bind_vertex_buffer(list, vbo.get(), 0);
-			mat_shader->set_parameter("global_data", global_data.get_handle());
-			mat_shader->bind(list);
+			shader->set_parameter("global_data", global_data.get_handle());
+			shader->bind(list);
 			device->cmd_draw(list, positions.size(), 1, 0, 0);
-#endif
+		};
 
-			device->cmd_end_render_pass(list);
+		rendergraph::ResourceHandle backbuffer;
+		rendergraph::ResourceHandle gbuffer_color;
+		rendergraph::ResourceHandle gbuffer_world_pos;
+		rendergraph::ResourceHandle gbuffer_normal;
+		rendergraph::ResourceHandle gbuffer_rsma;
+		rendergraph::ResourceHandle depth_buffer;
 
-			device->submit(list);
-		}
+		render_graph.add_gfx_pass("GBuffer",
+			[&](rendergraph::RenderPass& render_pass)
+			{
+				gbuffer_color = render_pass.add_color_output("color", { Format::R8G8B8A8Unorm });
+				gbuffer_world_pos = render_pass.add_color_output("world_pos", { Format::R8G8B8A8Unorm });
+				gbuffer_normal = render_pass.add_color_output("normal", { Format::R10G10B10A2Unorm });
+				gbuffer_rsma = render_pass.add_color_output("rsma", { Format::R8G8B8A8Unorm });
+				depth_buffer = render_pass.set_depth_stencil_output("depth_stencil", { Format::D32Sfloat });
+			},
+			[&](CommandListHandle list)
+			{
+				render_scene(list, mat_shader_gbuffer.get());
+			});
+
+		render_graph.add_gfx_pass("Lighting",
+			[&](rendergraph::RenderPass& render_pass)
+			{
+				backbuffer = render_pass.add_color_output("backbuffer", {});
+				render_pass.add_attachment_input("color");
+				render_pass.add_attachment_input("world_pos");
+				render_pass.add_attachment_input("normal");
+				render_pass.add_attachment_input("rsma");
+				render_pass.set_depth_stencil_input("depth_stencil");
+			},
+			[&](CommandListHandle list)
+			{
+				device->cmd_set_depth_stencil_state(list, { });
+
+				std::array color_blend_states = { PipelineColorBlendAttachmentState(
+					true,
+					BlendFactor::SrcAlpha,
+					BlendFactor::OneMinusSrcAlpha,
+					BlendOp::Add,
+					BlendFactor::OneMinusSrcAlpha,
+					BlendFactor::Zero,
+					BlendOp::Add) };
+
+				get_device()->cmd_set_color_blend_state(list, { false,
+					LogicOp::NoOp,
+					color_blend_states });
+				deferred_lighting->set_parameter("color", render_graph.get_handle_from_resource(gbuffer_color));
+				deferred_lighting->set_parameter("world_pos", render_graph.get_handle_from_resource(gbuffer_world_pos));
+				deferred_lighting->set_parameter("depth", render_graph.get_handle_from_resource(depth_buffer));
+				deferred_lighting->set_parameter("normal", render_graph.get_handle_from_resource(gbuffer_normal));
+				deferred_lighting->set_parameter("rsma", render_graph.get_handle_from_resource(gbuffer_rsma));
+				deferred_lighting->set_parameter("depth", render_graph.get_handle_from_resource(depth_buffer));
+				deferred_lighting->set_parameter("sampler", beebo_sampler.get());
+				deferred_lighting->set_parameter("global_data", global_data.get_handle());
+				deferred_lighting->bind(list);
+				draw_fullscreen_quad(list);
+			});
 
 		ImGui::UpdatePlatformWindows();
-		imgui::draw_viewports();
+		//imgui::draw_viewports(render_graph);
 
+		render_graph.set_backbuffer_attachment("backbuffer", 
+			get_device()->get_swapchain_backbuffer_view(swapchain.get()),
+			main_window->get_width(),
+			main_window->get_height());
+
+		render_graph.compile();
+
+		const auto list = device->allocate_cmd_list(gfx::QueueType::Gfx);
+		render_graph.execute(list);
+
+		std::array submit_wait_semaphores = { image_available_semaphore.get() };
+		std::array submit_signal_semaphores = { render_finished_semaphore.get() };
+		device->submit(list, submit_wait_semaphores, submit_signal_semaphores);
 
 		device->end_frame();
 
-		imgui::present_viewports();
+		//imgui::present_viewports();
+
+		std::array present_wait_semaphores = { render_finished_semaphore.get() };
+		device->present(swapchain.get(), present_wait_semaphores);
 
 		/** FPS Limiter */
 		{

@@ -4,6 +4,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(Boost REQUIRED COMPONENTS locale)
 
 ze_add_module(core
+	public/core.natvis
 	public/engine/core.hpp
 	public/engine/flags.hpp
 	public/engine/platform_macros.hpp

@@ -154,6 +154,10 @@ inline VkFormat convert_format(const Format& in_format)
 	case Format::R32Uint:
 		return VK_FORMAT_R32_UINT;
 
+	/** Exotic */
+	case Format::R10G10B10A2Unorm:
+		return VK_FORMAT_A2R10G10B10_UNORM_PACK32;
+
 	/** Block */
 	case Format::Bc1RgbUnormBlock:
 		return VK_FORMAT_BC1_RGB_UNORM_BLOCK;
@@ -226,6 +230,10 @@ inline Format convert_vk_format(const VkFormat in_format)
 
 	case VK_FORMAT_R32_UINT:
 		return Format::R32Uint;
+
+	/** Exotic */
+	case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+		return Format::R10G10B10A2Unorm;
 
 	/** Block */
 	case VK_FORMAT_BC1_RGB_UNORM_BLOCK:

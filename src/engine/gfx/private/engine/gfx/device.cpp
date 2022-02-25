@@ -640,6 +640,18 @@ uint32_t Device::get_srv_descriptor_index(const SamplerHandle& in_sampler)
 
 /** Commands */
 
+void Device::cmd_begin_region(const CommandListHandle& in_list, const std::string_view& in_name, const glm::vec4& in_color)
+{
+	backend_device->cmd_begin_region(cast_handle<CommandList>(in_list)->get_resource(),
+		in_name,
+		in_color);
+}
+
+void Device::cmd_end_region(const CommandListHandle& in_list)
+{
+	backend_device->cmd_end_region(cast_handle<CommandList>(in_list)->get_resource());
+}
+
 void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 	const RenderPassInfo& in_info)
 {
@@ -692,16 +704,16 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 
 	if(in_info.depth_stencil_attachment)
 	{
-		auto view = cast_handle<TextureView>(in_info.depth_stencil_attachment);
+		const auto view = cast_handle<TextureView>(in_info.depth_stencil_attachment);
 		attachments.emplace_back(view->get_resource());
 		attachment_descriptions.emplace_back(view->get_create_info().format,
 			view->get_texture().get_create_info().sample_count,
-			AttachmentLoadOp::Clear,
+			in_info.depth_attachment_read_only ? AttachmentLoadOp::Load : AttachmentLoadOp::Clear,
 			AttachmentStoreOp::Store,
 			AttachmentLoadOp::DontCare,
 			AttachmentStoreOp::DontCare,
-			TextureLayout::Undefined,
-			TextureLayout::DepthStencilAttachment);
+			in_info.depth_attachment_read_only ? TextureLayout::DepthStencilReadOnly : TextureLayout::Undefined,
+			TextureLayout::DepthStencilReadOnly);
 	}
 
 	std::vector<SubpassDescription> subpasses;
@@ -739,10 +751,10 @@ void Device::cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 		{
 			depth_stencil_attachment = AttachmentReference(static_cast<uint32_t>(attachment_descriptions.size()) - 1,
 				subpass.mode == RenderPassInfo::DepthStencilMode::ReadWrite 
-					? TextureLayout::DepthStencilAttachment : TextureLayout::DepthReadOnly);
+					? TextureLayout::DepthStencilAttachment : TextureLayout::DepthStencilReadOnly);
 		}
 		
-		subpasses.push_back(SubpassDescription(input_attachments,
+		subpasses.push_back(SubpassDescription({},
 			color_attachments,
 			resolve_attachments,
 			depth_stencil_attachment,

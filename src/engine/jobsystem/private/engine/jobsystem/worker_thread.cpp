@@ -1,4 +1,5 @@
 #include "engine/jobsystem/worker_thread.hpp"
+#include "engine/jobsystem/job.hpp"
 #include "engine/jobsystem/jobsystem.hpp"
 #include "engine/hal/thread.hpp"
 #include <random>
@@ -6,6 +7,11 @@
 
 namespace ze::jobsystem
 {
+
+bool WorkerThread::JobCompare::operator()(const Job* left, const Job* right) const
+{
+	return left->get_priority() < right->get_priority();
+}
 
 WorkerThread::WorkerThread(size_t in_index)
 	: index(in_index),

@@ -194,6 +194,7 @@ public:
 		const std::string_view& in_debug_name);
 	void reset();
 	void prepare_draw();
+	
 	void set_render_pass(const BackendDeviceResource& in_handle);
 	void set_pipeline_layout(const PipelineLayoutHandle& in_handle);
 	void set_depth_stencil_state(const PipelineDepthStencilStateCreateInfo& in_state);
@@ -331,13 +332,13 @@ struct DeviceResourceInfo
 struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 {
 	BufferCreateInfo info;
-	std::span<uint8_t> initial_data;
+	std::span<const uint8_t> initial_data;
 
 	explicit BufferInfo(const BufferCreateInfo& in_info,
-		const std::span<uint8_t>& in_initial_data = {}) : info(in_info),
+		const std::span<const uint8_t>& in_initial_data = {}) : info(in_info),
 		initial_data(in_initial_data) {}
 	
-	static BufferInfo make_staging(const size_t in_size, const std::span<uint8_t> in_initial_data = {})
+	static BufferInfo make_staging(const size_t in_size, const std::span<const uint8_t> in_initial_data = {})
 	{
 		return BufferInfo(BufferCreateInfo(in_size, 
 			MemoryUsage::CpuOnly, 
@@ -345,7 +346,7 @@ struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 			in_initial_data);
 	}
 
-	static BufferInfo make_ssbo_cpu_visible(const size_t in_size, const std::span<uint8_t> in_initial_data = {})
+	static BufferInfo make_ssbo_cpu_visible(const size_t in_size, const std::span<const uint8_t> in_initial_data = {})
 	{
 		return BufferInfo(BufferCreateInfo(in_size,
 			MemoryUsage::CpuToGpu,
@@ -365,6 +366,22 @@ struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 		return BufferInfo(BufferCreateInfo(in_size, 
 			MemoryUsage::CpuToGpu, 
 			BufferUsageFlags(BufferUsageFlagBits::IndexBuffer)));
+	}
+
+	static BufferInfo make_vertex_buffer(const size_t in_size, const std::span<const uint8_t> in_initial_data)
+	{
+		return BufferInfo(BufferCreateInfo(in_size,
+			MemoryUsage::GpuOnly,
+			BufferUsageFlags(BufferUsageFlagBits::VertexBuffer)),
+			in_initial_data);
+	}
+
+	static BufferInfo make_index_buffer(const size_t in_size, const std::span<const uint8_t> in_initial_data)
+	{
+		return BufferInfo(BufferCreateInfo(in_size,
+			MemoryUsage::GpuOnly,
+			BufferUsageFlags(BufferUsageFlagBits::IndexBuffer)),
+			in_initial_data);
 	}
 };
 
@@ -569,7 +586,9 @@ struct RenderPassInfo
 	
 	/** Attachments to use */
 	std::span<TextureViewHandle> color_attachments;
+	std::span<TextureViewHandle> input_attachments;
 	TextureViewHandle depth_stencil_attachment;
+	bool depth_attachment_read_only;
 
 	/** Clear/load/store flags. To add attachment 2/3 to load e.g: (1 << 2) | (1 << 3) */
 	uint32_t clear_attachment_flags;
@@ -581,7 +600,7 @@ struct RenderPassInfo
 
 	Rect2D render_area;
 
-	RenderPassInfo() : clear_attachment_flags(0), load_attachment_flags(0), store_attachment_flags(0) {}
+	RenderPassInfo() : depth_attachment_read_only(false), clear_attachment_flags(0), load_attachment_flags(0), store_attachment_flags(0) {}
 };
 
 /**
@@ -703,6 +722,8 @@ public:
 	uint32_t get_srv_descriptor_index(const SamplerHandle& in_sampler);
 
 	/** Commands */
+	void cmd_begin_region(const CommandListHandle& in_list, const std::string_view& in_name, const glm::vec4& in_color);
+	void cmd_end_region(const CommandListHandle& in_list);
 	void cmd_begin_render_pass(const CommandListHandle& in_cmd_list,
 		const RenderPassInfo& in_info);
 	void cmd_draw(const CommandListHandle& in_cmd_list,
@@ -795,6 +816,7 @@ public:
 	}
 
 	[[nodiscard]] BackendDevice* get_backend_device() const { return backend_device.get(); }
+	size_t get_current_frame_idx() const { return current_frame; }
 private:
 	void submit_queue(const QueueType& in_type);
 	BackendDeviceResource get_or_create_render_pass(const RenderPassCreateInfo& in_create_info);

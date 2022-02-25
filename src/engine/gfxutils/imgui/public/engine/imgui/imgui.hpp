@@ -7,8 +7,8 @@
 #include "glm/vec2.hpp"
 #include "engine/gfx/rendergraph/resource_registry.hpp"
 
-namespace ze::gfx::rendergraph { class RenderGraph;  }
 namespace ze::shadersystem { class ShaderManager;  }
+namespace ze::gfx::rendergraph { class RenderGraph;  }
 
 namespace ze::imgui
 {
@@ -63,7 +63,7 @@ struct ViewportRendererData
 	gfx::UniqueSemaphore image_available_semaphore;
 	gfx::UniqueSemaphore render_finished_semaphore;
 	bool has_submitted_work;
-	gfx::rendergraph::PhysicalResourceRegistry registry;
+	gfx::rendergraph::PhysicalResourceRegistry resource_registry;
 
 	ViewportRendererData() : has_submitted_work(false)
 	{

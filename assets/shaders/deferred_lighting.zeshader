@@ -1,0 +1,234 @@
+shader "DeferredLighting"
+{
+    parameters
+	{
+        uint global_data;
+		uint color;
+        uint world_pos;
+        uint normal;
+        uint rsma;
+        uint depth;
+        uint sampler;
+	}
+
+    #include "core.hlsl"
+
+    struct VertexInput
+    {
+        float2 position : POSITION;
+        float2 texcoord : TEXCOORD;
+    };
+
+    struct VertexOutput
+    {
+        float4 position : SV_POSITION;
+        float2 texcoord : TEXCOORD;
+    };
+
+    struct ShaderData
+    {
+        uint global_data;
+		uint color;
+        uint world_pos;
+        uint normal;
+        uint rsma;
+        uint depth;
+        uint sampler;
+    };
+
+    struct GlobalData
+	{
+		float4x4 world;
+		float4x4 view;
+		float4x4 proj;
+		float3 sun_dir;
+		float _pad01;
+		float3 view_pos;
+		float _pad02;
+		float3 view_dir;
+		float _pad03;
+		uint texture;
+		uint sampler;
+		uint roughness;
+		uint metallic;
+		uint normal;
+        float near;
+        float far;
+	};
+
+    ZE_PUSH_CONSTANT ShaderData data;
+
+    vertex
+    {
+        VertexOutput main(VertexInput input)
+		{
+			VertexOutput output;
+
+			output.position = float4(input.position, 0.0, 1.0);
+			output.texcoord = input.texcoord;
+
+			return output;
+		}
+    }
+
+    fragment
+    {
+        static const float PI = 3.14159265f;
+
+		float3 fresnel_schlick(float cos_theta, float3 f0)
+		{
+			return f0 + (1.0 - f0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
+		}
+
+		float distribution_ggx(float3 N, float3 H, float roughness)
+		{
+			float a = roughness * roughness;
+			float a2 = a * a;
+			float ndoth = max(dot(N, H), 0.0);
+			float ndoth2 = ndoth * ndoth;
+
+			float nom = a2;
+			float denom = (ndoth2 * (a2 - 1.0) + 1.0);
+			denom = PI * denom * denom;
+			
+			return nom / denom;
+		}
+
+		float geometry_schlick_ggx(float ndotv, float roughness)
+		{
+			float r = (roughness + 1.0);
+			float k = (r * r) / 8.0;
+			
+			float nom = ndotv;
+			float denom = ndotv * (1.0 - k) + k;
+
+			return nom / denom;
+		}
+
+		float geometry_smith(float3 N, float3 V, float3 L, float roughness)
+		{
+			float ndotv = max(dot(N, V), 0.0);
+			float ndotl = max(dot(N, L), 0.0);
+			float ggx1 = geometry_schlick_ggx(ndotl, roughness);
+			float ggx2 = geometry_schlick_ggx(ndotv, roughness);
+			return ggx1 * ggx2;
+		}
+
+        float3 calculate_lighting(VertexOutput input)
+        {
+            GlobalData global_data = get_struct<GlobalData>(data.global_data);
+
+            Texture2D texture_color = get_resource<Texture2D>(data.color);
+            Texture2D texture_world_pos = get_resource<Texture2D>(data.world_pos);
+            Texture2D texture_normal = get_resource<Texture2D>(data.normal);
+            Texture2D texture_rsma = get_resource<Texture2D>(data.rsma);
+            SamplerState texture_sampler = get_resource<SamplerState>(data.sampler);
+
+            float3 normal = texture_normal.Sample(texture_sampler, input.texcoord).rgb;
+            float3 world_pos = texture_world_pos.Sample(texture_sampler, input.texcoord).rgb;
+
+            float3 base_color = texture_color.Sample(texture_sampler, input.texcoord).rgb;
+            float roughness = texture_rsma.Sample(texture_sampler, input.texcoord).r;
+            float metallic = texture_rsma.Sample(texture_sampler, input.texcoord).b;
+            float ao = texture_rsma.Sample(texture_sampler, input.texcoord).a;
+
+            float3 N = normalize(normal);
+			float3 V = normalize(global_data.view_pos - world_pos);
+
+			float3 f0 = float3(0.04, 0.04, 0.04);
+			f0 = lerp(f0, base_color, metallic);
+
+			float3 lo = 0.0;
+
+			const float3 light_pos = global_data.sun_dir;
+
+			/** Light */
+			{
+				float3 L = normalize(light_pos - world_pos);
+				float3 H = normalize(V + L);
+				
+				float distance = length(light_pos - world_pos);
+				float attenuation = 1.0 / (distance * distance);
+				float3 radiance = float3(1, 1, 1) * attenuation;
+
+				float ndf = distribution_ggx(N, H, roughness);
+				float G = geometry_smith(N, V, L, roughness);
+				float3 f = fresnel_schlick(max(dot(H, V), 0.0), f0);
+
+				float3 numerator = ndf * G * f;
+				float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+				float3 specular = numerator / denominator;
+
+				float3 ks = f;
+				float3 kd = float3(1.0, 1.0, 1.0) - ks;
+				kd *= 1.0 - metallic;
+
+				float ndotl = max(dot(N, L), 0.0);
+				lo += (kd * base_color / PI + specular) * radiance * ndotl;
+			}
+
+			float3 ambient = float3(0.03, 0.03, 0.03) * base_color * ao;
+			float3 color = ambient + lo;
+
+			color = color / (color + float3(1.0, 1.0, 1.0));
+			color = pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+            return color;
+        }
+
+        bool in_bounds(VertexOutput input, float2 pos, float2 size)
+        {
+            return input.texcoord.x > pos.x && 
+                input.texcoord.y > pos.y &&
+                input.texcoord.x < (pos.x + size.x) &&
+                input.texcoord.y < (pos.y + size.y);
+        }
+
+        float4 main(VertexOutput input) : SV_TARGET0
+		{
+            Texture2D texture_color = get_resource<Texture2D>(data.color);
+            Texture2D texture_world_pos = get_resource<Texture2D>(data.world_pos);
+            Texture2D texture_normal = get_resource<Texture2D>(data.normal);
+            Texture2D texture_rsma = get_resource<Texture2D>(data.rsma);
+            Texture2D texture_depth = get_resource<Texture2D>(data.depth);
+            SamplerState texture_sampler = get_resource<SamplerState>(data.sampler);
+
+            float quad_size = 0.3;
+
+            float3 normal = texture_normal.Sample(texture_sampler, input.texcoord / quad_size).rgb;
+            float3 world_pos = texture_world_pos.Sample(texture_sampler, input.texcoord / quad_size).rgb;
+
+            float3 base_color = texture_color.Sample(texture_sampler, input.texcoord / quad_size).rgb;
+            float roughness = texture_rsma.Sample(texture_sampler, input.texcoord / quad_size).r;
+            float metallic = texture_rsma.Sample(texture_sampler, input.texcoord / quad_size).b;
+            float ao = texture_rsma.Sample(texture_sampler, input.texcoord / quad_size).a;
+
+            float depth = texture_depth.Sample(texture_sampler, input.texcoord / quad_size).r;
+
+            float3 lighting = calculate_lighting(input);
+
+            GlobalData global_data = get_struct<GlobalData>(data.global_data);
+
+            if(in_bounds(input, float2(0, 0), float2(quad_size, quad_size)))
+            {
+                return float4(world_pos, 1.0);
+            }
+            else if(in_bounds(input, float2(0, quad_size), float2(quad_size, quad_size)))
+            {
+                return float4(normal, 1.0);
+            }
+            else if(in_bounds(input, float2(0, quad_size * 2), float2(quad_size, quad_size)))
+            {
+                return float4(roughness, roughness, roughness, 1.0);
+            }
+            else if(in_bounds(input, float2(quad_size, 0), float2(quad_size, quad_size)))
+            {
+                float linear_depth = global_data.near * global_data.far / (global_data.far + depth * (global_data.near - global_data.far));
+                return float4(linear_depth.xxx, 1.0);
+            }
+            else
+            {
+                return float4(lighting, 1.0);
+            }
+		}
+    }
+}
