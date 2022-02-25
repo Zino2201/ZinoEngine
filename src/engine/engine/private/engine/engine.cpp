@@ -667,7 +667,7 @@ void Engine::run()
 			});
 
 		ImGui::UpdatePlatformWindows();
-		//imgui::draw_viewports(render_graph);
+		imgui::draw_viewports(render_graph);
 
 		render_graph.set_backbuffer_attachment("backbuffer", 
 			get_device()->get_swapchain_backbuffer_view(swapchain.get()),
@@ -685,7 +685,7 @@ void Engine::run()
 
 		device->end_frame();
 
-		//imgui::present_viewports();
+		imgui::present_viewports();
 
 		std::array present_wait_semaphores = { render_finished_semaphore.get() };
 		device->present(swapchain.get(), present_wait_semaphores);

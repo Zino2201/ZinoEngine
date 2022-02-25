@@ -55,16 +55,17 @@ void RenderGraph::compile()
 		pass_list.emplace_back(pass);
 	}
 
-	/** Traverse each pass dependencies recursively to get a (reversed) ordered list of referenced render passes */
+	/** Traverse each pass dependencies recursively to get a (reversed) unordered list of referenced render passes */
 	{
 		const auto pass_list_copy = pass_list;
 		for(auto& pass : pass_list_copy)
 			traverse_pass_dependencies(pass);
 	}
 
-	/** Reverse & order all render passes */
+	/** Reverse, prune & order all render passes */
 	std::ranges::reverse(pass_list);
 	prune_duplicate_passes();
+	order_passes();
 
 	/** Build all physical resources, this will also alias any virtual resources if possible */
 	build_physical_resources();
@@ -81,7 +82,8 @@ void RenderGraph::traverse_pass_dependencies(RenderPass* in_pass)
 
 	for(auto input : in_pass->get_attachment_inputs())
 	{
-		add_pass_recursive(in_pass, *resources[input]);
+		if(std::ranges::find(in_pass->get_color_outputs(), input) == in_pass->get_color_outputs().end())
+			add_pass_recursive(in_pass, *resources[input]);
 	}
 
 	for(auto input : in_pass->get_color_inputs())
@@ -94,6 +96,8 @@ void RenderGraph::add_pass_recursive(RenderPass* in_pass, const Resource& in_res
 {
 	for(auto pass : in_resource.get_writes())
 	{
+		ZE_CHECK(pass != in_pass);
+
 		pass_list.emplace_back(pass);
 		traverse_pass_dependencies(pass);
 	}
@@ -114,6 +118,33 @@ void RenderGraph::prune_duplicate_passes()
 		});
 
 	pass_list.erase(begin, end);
+}
+
+void RenderGraph::order_passes()
+{
+	std::vector<RenderPass*> passes = std::move(pass_list);
+
+	auto schedule = [&](const size_t in_index)
+	{
+		pass_list.emplace_back(passes[in_index]);
+		std::ranges::move(passes.begin() + in_index + 1,
+			passes.end(),
+			passes.begin() + in_index);
+		passes.pop_back();
+	};
+
+	schedule(0);
+	while(!passes.empty())
+	{
+		size_t pass_to_schedule = 0;
+
+		for(size_t i = 0; i < passes.size(); ++i)
+		{
+			pass_to_schedule = i;
+		}
+
+		schedule(pass_to_schedule);
+	}
 }
 
 void RenderGraph::build_physical_resources()
@@ -280,7 +311,7 @@ void RenderGraph::execute(CommandListHandle in_list)
 			info.render_area.width = std::max<uint32_t>(info.render_area.width, width);
 			info.render_area.height = std::max<uint32_t>(info.render_area.height, height);
 
-			if (pass->is_color_input(attachment))
+			if (pass->should_load(attachment))
 			{
 				info.load_attachment_flags |= 1 << (color_attachments.size() - 1);
 			}

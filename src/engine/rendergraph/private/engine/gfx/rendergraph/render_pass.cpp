@@ -25,17 +25,21 @@ ResourceHandle RenderPass::add_attachment_input(const std::string& in_name)
 void RenderPass::add_color_input(const std::string& in_name)
 {
 	auto& resource = graph.get_attachment_resource(in_name);
+	resource.add_read(this);
 	ZE_CHECK(resource.get_usage_flags() & TextureUsageFlagBits::ColorAttachment);
 	color_inputs.emplace_back(resource.get_index());
 }
 
-ResourceHandle RenderPass::add_color_output(const std::string& in_name, const AttachmentInfo& in_attachment)
+ResourceHandle RenderPass::add_color_output(const std::string& in_name, const AttachmentInfo& in_attachment, bool in_force_load)
 {
 	auto& resource = graph.get_attachment_resource(in_name);
 	resource.set_info(in_attachment);
 	resource.add_usage(TextureUsageFlagBits::ColorAttachment);
 	resource.add_write(this);
 	resource.add_queue(target_queue);
+
+	if (in_force_load)
+		force_loads.emplace_back(resource.get_index());
 
 	color_outputs.emplace_back(resource.get_index());
 
@@ -72,6 +76,20 @@ ResourceHandle RenderPass::set_depth_stencil_output(const std::string& in_name, 
 bool RenderPass::is_color_input(const ResourceHandle in_handle) const
 {
 	for (const auto& input : color_inputs)
+	{
+		if (input == in_handle)
+			return true;
+	}
+
+	return false;
+}
+
+bool RenderPass::should_load(const ResourceHandle in_handle) const
+{
+	if (is_color_input(in_handle))
+		return true;
+
+	for (const auto& input : force_loads)
 	{
 		if (input == in_handle)
 			return true;

@@ -99,11 +99,12 @@ public:
 
 	ResourceHandle add_attachment_input(const std::string& in_name);
 	void add_color_input(const std::string& in_name);
-	ResourceHandle add_color_output(const std::string& in_name, const AttachmentInfo& in_attachment);
+	ResourceHandle add_color_output(const std::string& in_name, const AttachmentInfo& in_attachment, bool in_force_load = false);
 	ResourceHandle set_depth_stencil_input(const std::string& in_name);
 	ResourceHandle set_depth_stencil_output(const std::string& in_name, const AttachmentInfo& in_attachment);
 
 	bool is_color_input(const ResourceHandle in_handle) const;
+	bool should_load(const ResourceHandle in_handle) const;
 
 	const auto& get_attachment_inputs() const { return attachment_inputs; }
 	const auto& get_color_inputs() const { return color_inputs; }
@@ -122,6 +123,7 @@ private:
 	ResourceHandle depth_stencil_input;
 	ResourceHandle depth_stencil_output;
 	std::vector<RenderPass*> subpasses;
+	std::vector<ResourceHandle> force_loads;
 };
 
 class RenderPassSimple : public RenderPass
@@ -225,6 +227,7 @@ private:
 	void traverse_pass_dependencies(RenderPass* in_pass);
 	void add_pass_recursive(RenderPass* in_pass, const Resource& in_resource);
 	void prune_duplicate_passes();
+	void order_passes();
 	void build_physical_resources();
 	void build_barriers();
 	std::pair<TextureHandle, TextureViewHandle> get_handles_from_physical_attachment(uint32_t in_physical_resource);
