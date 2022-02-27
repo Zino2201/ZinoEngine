@@ -120,21 +120,22 @@ Device::Device(Backend& in_backend,
 {
 	current_device = this;
 
-	frames.resize(max_frames_in_flight);
+	for(size_t i = 0; i < max_frames_in_flight; ++i)
+		frames.emplace_back(std::make_unique<Frame>());
 }
 
 Device::~Device()
 {
 	for(auto& frame : frames)
 	{
-		if(!frame.wait_fences.empty())
+		if(!frame->wait_fences.empty())
 		{
-			wait_for_fences(frame.wait_fences);
+			wait_for_fences(frame->wait_fences);
 		}
 
-		frame.destroy();
-		frame.free_resources();
-		frame.reset();
+		frame->destroy();
+		frame->free_resources();
+		frame->reset();
 	}
 
 	for(auto& [create_info, pipeline] : gfx_pipelines)
@@ -158,7 +159,7 @@ Device::~Device()
 }
 
 Device::Frame::Frame() : gfx_command_pool(QueueType::Gfx),
-	compute_command_pool(QueueType::Compute)
+	compute_command_pool(QueueType::Compute), gfx_submitted(false)
 {
 	auto fence = get_device()->create_fence(FenceCreateInfo());
 	gfx_fence = fence.get_value();
@@ -201,29 +202,27 @@ void Device::wait_idle()
 
 void Device::new_frame()
 {
-	backend_device->new_frame();
-
 	static bool first_frame = true;
-
-	if(!first_frame)
-	{
-		current_frame = (current_frame + 1) % max_frames_in_flight;
-
-		/** Wait for fences before doing anything */
-		if(!get_current_frame().wait_fences.empty())
-		{
-			wait_for_fences(get_current_frame().wait_fences);
-			reset_fences(get_current_frame().wait_fences);
-		}
-
-		/** Free all resources marked to be destroyed */
-		get_current_frame().free_resources();
-		get_current_frame().reset();
-	}
-	else
+	if(first_frame)
 	{
 		first_frame = false;
+		end_frame();
 	}
+	
+	current_frame = (current_frame + 1) % max_frames_in_flight;
+
+	/** Wait for fences before doing anything */
+	if (!get_current_frame().wait_fences.empty())
+	{
+		wait_for_fences(get_current_frame().wait_fences);
+		reset_fences(get_current_frame().wait_fences);
+	}
+
+	/** Free all resources marked to be destroyed */
+	get_current_frame().free_resources();
+	get_current_frame().reset();
+
+	backend_device->new_frame();
 }
 
 void Device::end_frame()

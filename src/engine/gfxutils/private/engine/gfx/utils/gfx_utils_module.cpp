@@ -5,7 +5,7 @@
 namespace ze::gfx
 {
 
-GfxUtilsModule::GfxUtilsModule() : scatter_upload_shader(nullptr)
+GfxUtilsModule::GfxUtilsModule()
 {
 	{
 		const std::array positions_uvs =
@@ -41,18 +41,26 @@ GfxUtilsModule::GfxUtilsModule() : scatter_upload_shader(nullptr)
 
 void GfxUtilsModule::initialize_shaders(shadersystem::ShaderManager& in_shader_system)
 {
-	scatter_upload_shader = in_shader_system.get_shader("ScatterUpload");
-	ZE_ASSERTF(scatter_upload_shader,
-		"Scatter upload shader unavailable! Can't resume.");
+	load_required_shaders(in_shader_system, "ScatterUpload");
+	load_required_shaders(in_shader_system, "SPDMipmapsGen");
+}
 
-	const auto scatter_upload_shader_permutation = scatter_upload_shader->get_permutation({});
-	scatter_upload_shader_permutation->compile();
+void GfxUtilsModule::load_required_shaders(shadersystem::ShaderManager& in_shader_system, const std::string& in_name)
+{
+	auto shader = in_shader_system.get_shader(in_name);
+	ZE_ASSERTF(shader,
+		"{} shader not found! Can't resume.",
+		in_name);
+
+	const auto permutation = shader->get_permutation({});
+	permutation->compile();
 
 	/** Wait for all shaders to be compiled */
-	while(scatter_upload_shader_permutation->is_compiling()) {}
+	while (permutation->is_compiling()) {}
 
-	ZE_ASSERTF(scatter_upload_shader && scatter_upload_shader_permutation->is_available(), 
-		"Scatter upload shader unavailable! Can't resume.");
+	ZE_ASSERTF(permutation->is_available(),
+		"{} shader permutation unavailable! Can't resume.", 
+		in_name);
 }
 
 ZE_IMPLEMENT_MODULE(GfxUtilsModule, GfxUtils);

@@ -18,11 +18,26 @@ public:
 	
 	~VulkanTextureView()
 	{
+#if ZE_BUILD(IS_DEBUG)
 		if (srv_index)
-			device.get_descriptor_manager().free_index(srv_index);
+			device.get_descriptor_manager().update_descriptor(srv_index, VK_IMAGE_VIEW_TYPE_2D, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL);
 
 		if (uav_index)
+			device.get_descriptor_manager().update_descriptor(uav_index, VK_IMAGE_VIEW_TYPE_2D, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL);
+
+		if (srv_index || uav_index)
+			device.get_descriptor_manager().flush_updates();
+#endif
+
+		if (srv_index)
+		{
+			device.get_descriptor_manager().free_index(srv_index);
+		}
+
+		if (uav_index)
+		{
 			device.get_descriptor_manager().free_index(uav_index);
+		}
 
 		vkDestroyImageView(device.get_device(), image_view, nullptr);
 	}

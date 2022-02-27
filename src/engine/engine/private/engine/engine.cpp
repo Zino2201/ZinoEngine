@@ -22,6 +22,7 @@
 #include "engine/gfx/rendergraph/resource_registry.hpp"
 #include "engine/gfx/uniform_buffer.hpp"
 #include "engine/gfx/utils/fullscreen_quad.hpp"
+#include "engine/gfx/utils/mipmap_generation.hpp"
 
 namespace ze
 {
@@ -312,19 +313,29 @@ void Engine::run()
 
 	auto previous = std::chrono::high_resolution_clock::now();
 
+	auto calculate_mip_count = [](uint32_t in_width, uint32_t in_height) -> uint32_t
+	{
+		return static_cast<uint32_t>(std::floor(std::log2(std::max(in_width, in_height)))) + 1;
+	};
+
 	int beebo_width = 0, beebo_height = 0;
 	stbi_uc* data = stbi_load("assets/Bricks075B_4K_Color.jpg", &beebo_width, &beebo_height, nullptr, 4);
 	auto beebo = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo::make_immutable_2d(
 		beebo_width,
 		beebo_height,
 		gfx::Format::R8G8B8A8Unorm,
-		1,
-		gfx::TextureUsageFlagBits::Sampled,
+		calculate_mip_count(beebo_width, beebo_width),
+		gfx::TextureUsageFlagBits::Sampled | gfx::TextureUsageFlagBits::UAV,
 		{ data, data + beebo_width * beebo_height * 4 })).get_value());
 
 	auto beebo_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		beebo.get(),
-		gfx::Format::R8G8B8A8Unorm).set_debug_name("Beebo View")).get_value());
+		gfx::Format::R8G8B8A8Unorm,
+		gfx::TextureSubresourceRange(gfx::TextureAspectFlagBits::Color,
+			0,
+			calculate_mip_count(beebo_width, beebo_width),
+			0,
+			1)).set_debug_name("Beebo View")).get_value());
 
 	int normal_texture_width = 0, normal_texture_height = 0;
 	stbi_uc* normal_texture_data = stbi_load("assets/Bricks075B_4K_NormalDX.jpg", &normal_texture_width, &normal_texture_height, nullptr, 4);
@@ -332,16 +343,17 @@ void Engine::run()
 		normal_texture_width,
 		normal_texture_height,
 		gfx::Format::R8G8B8A8Unorm,
-		1,
-		gfx::TextureUsageFlagBits::Sampled,
+		calculate_mip_count(normal_texture_width, normal_texture_height),
+		gfx::TextureUsageFlagBits::Sampled | gfx::TextureUsageFlagBits::UAV,
 		{ normal_texture_data, normal_texture_data + normal_texture_width * normal_texture_height * 4 })).get_value());
 
 	auto normal_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		normal_texture.get(),
-		gfx::Format::R8G8B8A8Unorm).set_debug_name("Normal View")).get_value());
+		gfx::Format::R8G8B8A8Unorm,
+		gfx::TextureSubresourceRange(gfx::TextureAspectFlagBits::Color,
+			0, calculate_mip_count(normal_texture_width, normal_texture_height), 0, 1)).set_debug_name("Normal View")).get_value());
 
-
-	auto beebo_sampler = gfx::UniqueSampler(device->create_sampler(gfx::SamplerInfo()).get_value());
+	auto beebo_sampler = gfx::UniqueSampler(device->create_sampler(gfx::SamplerInfo(gfx::SamplerCreateInfo())).get_value());
 
 	stbi_image_free(data);
 
@@ -351,13 +363,15 @@ void Engine::run()
 		noise_width,
 		noise_height,
 		gfx::Format::R8G8B8A8Unorm,
-		1,
-		gfx::TextureUsageFlagBits::Sampled,
+		calculate_mip_count(noise_width, noise_height),
+		gfx::TextureUsageFlagBits::Sampled | gfx::TextureUsageFlagBits::UAV,
 		{ noise_data, noise_data + noise_width * noise_height * 4 })).get_value());
 
 	auto roughness_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		roughness_texture.get(),
-		gfx::Format::R8G8B8A8Unorm).set_debug_name("Roughness View")).get_value());
+		gfx::Format::R8G8B8A8Unorm,
+		gfx::TextureSubresourceRange(gfx::TextureAspectFlagBits::Color,
+			0, calculate_mip_count(noise_width, noise_height), 0, 1)).set_debug_name("Roughness View")).get_value());
 
 	stbi_image_free(noise_data);
 
@@ -366,14 +380,43 @@ void Engine::run()
 		noise_width,
 		noise_height,
 		gfx::Format::R8G8B8A8Unorm,
-		1,
-		gfx::TextureUsageFlagBits::Sampled,
+		calculate_mip_count(noise_width, noise_height),
+		gfx::TextureUsageFlagBits::Sampled | gfx::TextureUsageFlagBits::UAV,
 		{ metallic_data, metallic_data + noise_width * noise_height * 4 })).get_value());
 
 	auto metallic_texture_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_2d(
 		metallic_texture.get(),
-		gfx::Format::R8G8B8A8Unorm).set_debug_name("Metallic View")).get_value());
+		gfx::Format::R8G8B8A8Unorm,
+		gfx::TextureSubresourceRange(gfx::TextureAspectFlagBits::Color,
+			0, calculate_mip_count(noise_width, noise_height), 0, 1)).set_debug_name("Metallic View")).get_value());
 
+	gfx::generate_mipmaps(*shader_manager,
+		beebo.get(),
+		gfx::Format::R8G8B8A8Unorm,
+		beebo_width,
+		beebo_height,
+		1);
+
+	gfx::generate_mipmaps(*shader_manager,
+		normal_texture.get(),
+		gfx::Format::R8G8B8A8Unorm,
+		beebo_width,
+		beebo_height,
+		1);
+
+	gfx::generate_mipmaps(*shader_manager,
+		roughness_texture.get(),
+		gfx::Format::R8G8B8A8Unorm,
+		beebo_width,
+		beebo_height,
+		1);
+
+	gfx::generate_mipmaps(*shader_manager,
+		metallic_texture.get(),
+		gfx::Format::R8G8B8A8Unorm,
+		beebo_width,
+		beebo_height,
+		1);
 
 #if 0
 	int sky_tex_width = 0, sky_tex_height = 0;
@@ -714,38 +757,6 @@ void Engine::create_swapchain(const gfx::UniqueSwapchain& old_swapchain)
 		main_window->get_width(),
 		main_window->get_height(),
 		old_swapchain.is_valid() ? device->get_swapchain_backend_handle(old_swapchain.get()) : gfx::null_backend_resource)).get_value());
-
-	depth_buffer = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo(
-		gfx::TextureCreateInfo(
-			gfx::TextureType::Tex2D,
-			gfx::MemoryUsage::GpuOnly,
-			gfx::Format::D24UnormS8Uint,
-			main_window->get_width(),
-			main_window->get_height(),
-			1,
-			1,
-			1,
-			gfx::SampleCountFlagBits::Count8,
-			gfx::TextureUsageFlagBits::DepthStencilAttachment))).get_value());
-
-	depth_buffer_view = gfx::UniqueTextureView(device->create_texture_view(gfx::TextureViewInfo::make_depth(
-		depth_buffer.get(), gfx::Format::D24UnormS8Uint).set_debug_name("Depth Stencil View")).get_value());
-
-	base_pass_texture = gfx::UniqueTexture(device->create_texture(gfx::TextureInfo(
-		gfx::TextureCreateInfo(
-			gfx::TextureType::Tex2D,
-			gfx::MemoryUsage::GpuOnly,
-			gfx::Format::B8G8R8A8Unorm,
-			main_window->get_width(),
-			main_window->get_height(),
-			1,
-			1,
-			1,
-			gfx::SampleCountFlagBits::Count8,
-			gfx::TextureUsageFlagBits::ColorAttachment))).get_value());
-
-	base_pass_texture_view = gfx::UniqueTextureView(device->create_texture_view(
-		gfx::TextureViewInfo::make_2d(base_pass_texture.get(), gfx::Format::B8G8R8A8Unorm)).get_value());
 
 	if(old_swapchain.is_valid())
 		imgui::update_main_viewport(*main_window, swapchain.get());

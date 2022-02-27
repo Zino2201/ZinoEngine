@@ -53,7 +53,7 @@ enum class TextureUsageFlagBits
 	TransferSrc = 1 << 3,
 	TransferDst = 1 << 4,
 	Cube = 1 << 5,
-	//InputAttachment = 1 << 6,
+	UAV = 1 << 6,
 };
 ZE_ENABLE_FLAG_ENUMS(TextureUsageFlagBits, TextureUsageFlags);
 	

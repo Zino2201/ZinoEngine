@@ -1,0 +1,111 @@
+shader "SPDMipmapsGen"
+{  
+    parameters
+    {
+        uint mip_count;
+        uint work_group_count;
+        uint2 work_group_offset;
+        uint global_atomic_counter;
+        uint src_texture;
+        uint mips[13];
+        uint sampler;
+        float2 inv_input_size;
+    }
+
+    compute
+    {
+        #include "core.hlsl"
+        
+        struct ShaderData
+        {
+            uint mip_count;
+            uint work_group_count;
+            uint2 work_group_offset;
+            uint global_atomic_counter;
+            uint src_texture;
+
+            /** Mips (starting from level 1) */
+            uint mips[12];
+            uint sampler;
+            float2 inv_input_size;
+        };
+
+        ZE_PUSH_CONSTANT ShaderData data;
+
+        #define A_GPU
+        #define A_HLSL
+        #define A_WAVE
+        #define SPD_LINEAR_SAMPLER
+
+        #include "utils/ffx_a.h"
+
+        groupshared AU1 spdCounter;
+        groupshared AF1 spdIntermediateR[16][16];
+        groupshared AF1 spdIntermediateG[16][16];
+        groupshared AF1 spdIntermediateB[16][16];
+        groupshared AF1 spdIntermediateA[16][16];
+
+        AF4 SpdLoadSourceImage(ASU2 tex, AU1 slice)
+        {
+            Texture2D texture = get_resource<Texture2D>(data.src_texture);
+            SamplerState sampler = get_resource<SamplerState>(data.sampler);
+            return texture.SampleLevel(sampler, tex * data.inv_input_size + data.inv_input_size, 0);
+        }
+
+        AF4 SpdLoad(ASU2 tex, AU1 slice)
+        {
+            RWTexture2D<float4> texture = get_resource< RWTexture2D<float4> >(data.mips[5]);
+            return texture[tex];
+        }
+
+        void SpdStore(ASU2 pix, AF4 outValue, AU1 mip, AU1 slice)
+        {
+            RWTexture2D<float4> texture = get_resource< RWTexture2D<float4> >(data.mips[mip]);
+            texture[pix] = outValue;
+        }
+
+        void SpdIncreaseAtomicCounter(AU1 slice)
+        {
+            get_resource<RWByteAddressBuffer>(data.global_atomic_counter).InterlockedAdd(0, 1, spdCounter);
+        }
+        
+        AU1 SpdGetAtomicCounter()
+        {
+            return spdCounter;
+        }
+
+        void SpdResetAtomicCounter(AU1 slice)
+        {
+           get_resource<RWByteAddressBuffer>(data.global_atomic_counter).Store(0, 0);
+        }
+        
+        AF4 SpdLoadIntermediate(AU1 x, AU1 y)
+        {
+            return AF4(spdIntermediateR[x][y], 
+                spdIntermediateG[x][y], 
+                spdIntermediateB[x][y], 
+                spdIntermediateA[x][y]);
+        }
+
+        void SpdStoreIntermediate(AU1 x, AU1 y, AF4 value)
+        {
+            spdIntermediateR[x][y] = value.x;
+            spdIntermediateG[x][y] = value.y;
+            spdIntermediateB[x][y] = value.z;
+            spdIntermediateA[x][y] = value.w;
+        }
+
+        AF4 SpdReduce4(AF4 v0, AF4 v1, AF4 v2, AF4 v3)
+        {
+            return (v0 + v1 + v2 + v3) * 0.25;
+        }
+
+        #include "utils/ffx_spd.h"
+
+        [numthreads(256, 1, 1)]
+        void main(uint3 work_group_id : SV_GroupID, uint thread_index : SV_GroupIndex)
+        {
+            SpdDownsample(AU2(work_group_id.xy), thread_index, data.mip_count, data.work_group_count, work_group_id.z, data.work_group_offset);
+        }
+    }
+}

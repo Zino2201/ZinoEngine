@@ -44,6 +44,38 @@ bool ShaderInstance::set_parameter(const std::string& in_name, gfx::TextureViewH
 	return false;
 }
 
+bool ShaderInstance::set_parameter_uav(const std::string& in_name, const std::span<gfx::TextureViewHandle>& in_textures)
+{
+	if (const auto* parameter_info = permutation.get_parameter_info(in_name))
+	{
+		for(size_t i = 0; i < in_textures.size(); ++i)
+		{
+			const uint32_t index = gfx::get_device()->get_uav_descriptor_index(in_textures[i]);
+			memcpy(push_constant_data.data() + parameter_info->offset + (i * sizeof(uint32_t)), &index, sizeof(uint32_t));
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+bool ShaderInstance::set_parameter_uav(const std::string& in_name, const std::span<gfx::UniqueTextureView>& in_textures)
+{	
+	if (const auto* parameter_info = permutation.get_parameter_info(in_name))
+	{
+		for (size_t i = 0; i < in_textures.size(); ++i)
+		{
+			const uint32_t index = gfx::get_device()->get_uav_descriptor_index(in_textures[i].get());
+			memcpy(push_constant_data.data() + parameter_info->offset + (i * sizeof(uint32_t)), &index, sizeof(uint32_t));
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
 bool ShaderInstance::set_parameter(const std::string& in_name, gfx::SamplerHandle in_buffer)
 {
 	if (const auto* parameter_info = permutation.get_parameter_info(in_name))

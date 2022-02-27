@@ -183,7 +183,7 @@ public:
 	virtual GfxResult wait_for_fences(const std::span<BackendDeviceResource>& in_fences,
 		const bool in_wait_for_all = true,
 		const uint64_t in_timeout = std::numeric_limits<uint64_t>::max()) = 0;
-
+	virtual GfxResult get_fence_status(const BackendDeviceResource in_fence) = 0;
 	virtual void reset_fences(const std::span<BackendDeviceResource>& in_fences) = 0;
 
 	/** Queue */

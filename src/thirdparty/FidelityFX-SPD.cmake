@@ -1,0 +1,2 @@
+CPMAddPackage("gh:GPUOpen-Effects/FidelityFX-SPD@2.0")
+set(FIDELITY_FX_SPD_ROOT_DIR ${FidelityFX-SPD_SOURCE_DIR} CACHE STRING "" FORCE)

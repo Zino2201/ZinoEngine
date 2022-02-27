@@ -14,7 +14,7 @@ public:
 		VmaAllocation in_allocation,
 		VkImageUsageFlags in_flags) : device(in_device), image(in_image), allocation(in_allocation), image_usage_flags(in_flags) {}
 
-	VulkanTexture(VulkanDevice& in_device, 
+	VulkanTexture(VulkanDevice& in_device,
 		VkImage in_image) : device(in_device), image(in_image), allocation(nullptr) {}
 	
 	VulkanTexture(VulkanTexture&& in_other) noexcept = delete;

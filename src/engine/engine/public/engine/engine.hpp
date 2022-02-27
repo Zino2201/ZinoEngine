@@ -39,10 +39,6 @@ private:
 	gfx::UniqueSwapchain swapchain;
 	gfx::UniqueSemaphore image_available_semaphore;
 	gfx::UniqueSemaphore render_finished_semaphore;
-	gfx::UniqueTexture depth_buffer;
-	gfx::UniqueTextureView depth_buffer_view;
-	gfx::UniqueTexture base_pass_texture;
-	gfx::UniqueTextureView base_pass_texture_view;
 	glm::ivec2 mouse_delta;
 };
 

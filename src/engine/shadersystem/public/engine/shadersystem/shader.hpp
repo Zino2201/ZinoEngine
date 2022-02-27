@@ -4,6 +4,7 @@
 #include <bitset>
 #include "engine/jobsystem/job.hpp"
 #include "shader_permutation_id.hpp"
+#include "glm/vec2.hpp"
 
 namespace ze::shadersystem
 {
@@ -172,6 +173,8 @@ public:
 	bool set_parameter(const std::string& in_name, gfx::BufferHandle in_buffer);
 	bool set_parameter(const std::string& in_name, gfx::TextureViewHandle in_buffer);
 	bool set_parameter(const std::string& in_name, gfx::SamplerHandle in_buffer);
+	bool set_parameter_uav(const std::string& in_name, const std::span<gfx::TextureViewHandle>& in_textures);
+	bool set_parameter_uav(const std::string& in_name, const std::span<gfx::UniqueTextureView>& in_textures);
 
 	template<typename T>
 		requires std::is_standard_layout_v<T>
@@ -180,6 +183,17 @@ public:
 		if (const auto* parameter_info = permutation.get_parameter_info(in_name))
 		{
 			memcpy(push_constant_data.data() + parameter_info->offset, &in_value, sizeof(T));
+			return true;
+		}
+
+		return false;
+	}
+
+	bool set_parameter(const std::string& in_name, glm::vec2 in_value)
+	{
+		if (const auto* parameter_info = permutation.get_parameter_info(in_name))
+		{
+			memcpy(push_constant_data.data() + parameter_info->offset, &in_value, sizeof(glm::ivec2));
 			return true;
 		}
 

@@ -15,8 +15,18 @@ public:
 
 	~VulkanSampler()
 	{
+#if ZE_BUILD(IS_DEBUG)
 		if (srv_index)
+		{
+			device.get_descriptor_manager().update_descriptor(srv_index, VK_NULL_HANDLE);
+			device.get_descriptor_manager().flush_updates();
+		}
+#endif
+
+		if (srv_index)
+		{
 			device.get_descriptor_manager().free_index(srv_index);
+		}
 
 		vkDestroySampler(device.get_device(), sampler, nullptr);
 	}

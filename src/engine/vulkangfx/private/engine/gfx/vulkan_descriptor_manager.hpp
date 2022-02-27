@@ -104,6 +104,18 @@ private:
 	std::vector<BufferUpdate> buffer_updates;
 	std::vector<TextureUpdate> texture_updates;
 	std::vector<SamplerUpdate> sampler_updates;
+
+	/** Dummy objects used as a workaround of Vulkan validation layers bug https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/3729 */
+#if ZE_BUILD(IS_DEBUG)
+	VkBuffer dummy_buffer;
+	VmaAllocation dummy_buffer_allocation;
+
+	VkImage dummy_texture;
+	VkImageView dummy_texture_view;
+	VmaAllocation dummy_texture_allocation;
+
+	VkSampler dummy_sampler;
+#endif
 };
 
 }

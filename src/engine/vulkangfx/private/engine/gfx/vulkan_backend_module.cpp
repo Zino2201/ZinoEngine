@@ -25,9 +25,9 @@ Result<std::unique_ptr<Backend>, std::string> VulkanBackendModule::create_vulkan
 	{
 		builder.enable_validation_layers();
 		builder.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
-		builder.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
-		builder.enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		//builder.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
 		//builder.add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
+		builder.enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 		builder.set_debug_callback(
 			[](VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
 				VkDebugUtilsMessageTypeFlagsEXT message_type,

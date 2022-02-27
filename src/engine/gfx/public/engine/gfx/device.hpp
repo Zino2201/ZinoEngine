@@ -53,7 +53,6 @@ public:
 
 		if(debug_name.empty())
 			debug_name = std::string("Unnamed ") + std::to_string(Type) + " " + std::to_string(resource_unique_idx++);
-		logger::verbose(log_gfx_device, "Created device resource \"{}\"", debug_name);
 		device.get_backend_device()->set_resource_name(debug_name, 
 			Type,
 			in_resource);
@@ -62,12 +61,7 @@ public:
 #endif
 	}
 
-	virtual ~BackendResourceWrapper()
-	{
-#if ZE_BUILD(IS_DEBUG)
-		logger::verbose(log_gfx_device, "Destroyed device resource \"{}\"", debug_name);
-#endif
-	}
+	virtual ~BackendResourceWrapper() = default;
 
 	[[nodiscard]] BackendDeviceResource get_resource() const { return resource; }
 	[[nodiscard]] uint32_t get_srv_index() const { return srv_index; }
@@ -343,6 +337,14 @@ struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 		return BufferInfo(BufferCreateInfo(in_size, 
 			MemoryUsage::CpuOnly, 
 			BufferUsageFlags()),
+			in_initial_data);
+	}
+
+	static BufferInfo make_ssbo(const size_t in_size, const std::span<const uint8_t> in_initial_data = {})
+	{
+		return BufferInfo(BufferCreateInfo(in_size,
+			MemoryUsage::GpuOnly,
+			BufferUsageFlags(BufferUsageFlagBits::StorageBuffer)),
 			in_initial_data);
 	}
 
@@ -638,6 +640,8 @@ class Device final
 		bool gfx_submitted;
 
 		Frame();
+		Frame(const Frame&) = delete;
+		Frame& operator=(const Frame&) = delete;
 
 		void free_resources();
 		void reset()
@@ -650,6 +654,7 @@ class Device final
 			expired_pipeline_layouts.clear();
 			expired_pipelines.clear();
 			expired_semaphores.clear();
+			expired_samplers.clear();
 
 			gfx_command_pool.reset();
 
@@ -823,12 +828,12 @@ private:
 	BackendDeviceResource get_or_create_gfx_pipeline(const GfxPipelineCreateInfo& in_create_info);
 	BackendDeviceResource get_or_create_compute_pipeline(const ComputePipelineCreateInfo& in_create_info);
 	
-	[[nodiscard]] Frame& get_current_frame() { return frames[current_frame]; }
+	[[nodiscard]] Frame& get_current_frame() { return *frames[current_frame]; }
 private:
 	Backend& backend;
 	std::unique_ptr<BackendDevice> backend_device;
 	size_t current_frame;
-	std::vector<Frame> frames;
+	std::vector<std::unique_ptr<Frame>> frames;
 
 	robin_hood::unordered_map<RenderPassCreateInfo, BackendDeviceResource> render_passes;
 	robin_hood::unordered_map<GfxPipelineCreateInfo, BackendDeviceResource> gfx_pipelines;

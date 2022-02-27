@@ -44,7 +44,7 @@ struct SamplerCreateInfo
 		const bool in_enable_aniostropy = false,
 		const float in_max_anisotropy = 0.f,
 		const float in_min_lod = 0.f,
-		const float in_max_lod = 0.f) :
+		const float in_max_lod = std::numeric_limits<float>::max()) :
 		min_filter(in_min_filter), mag_filter(in_mag_filter),
 		mip_map_mode(in_mip_map_mode), address_mode_u(in_address_mode_u),
 		address_mode_v(in_address_mode_v), address_mode_w(in_address_mode_w),

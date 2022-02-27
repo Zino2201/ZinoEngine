@@ -192,7 +192,7 @@ shader "DeferredLighting"
             Texture2D texture_depth = get_resource<Texture2D>(data.depth);
             SamplerState texture_sampler = get_resource<SamplerState>(data.sampler);
 
-            float quad_size = 0.3;
+            float quad_size = 0.25;
 
             float3 normal = texture_normal.Sample(texture_sampler, input.texcoord / quad_size).rgb;
             float3 world_pos = texture_world_pos.Sample(texture_sampler, input.texcoord / quad_size).rgb;
@@ -220,7 +220,7 @@ shader "DeferredLighting"
             {
                 return float4(roughness, roughness, roughness, 1.0);
             }
-            else if(in_bounds(input, float2(quad_size, 0), float2(quad_size, quad_size)))
+            else if(in_bounds(input, float2(0, quad_size * 3), float2(quad_size, quad_size)))
             {
                 float linear_depth = global_data.near * global_data.far / (global_data.far + depth * (global_data.near - global_data.far));
                 return float4(linear_depth.xxx, 1.0);

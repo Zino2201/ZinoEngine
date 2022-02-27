@@ -37,22 +37,27 @@ Result<std::unique_ptr<BackendDevice>, std::string> VulkanBackend::create_device
 	{
 		vkb::PhysicalDeviceSelector phys_device_selector(instance);
 
-		VkPhysicalDeviceVulkan12Features features = {};
-		features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-		features.descriptorIndexing = VK_TRUE;
-		features.runtimeDescriptorArray = VK_TRUE;
-		features.descriptorBindingPartiallyBound = VK_TRUE;
-		features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
-		features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-		features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-		features.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+		VkPhysicalDeviceVulkan12Features vulkan12_features = {};
+		vulkan12_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		vulkan12_features.descriptorIndexing = VK_TRUE;
+		vulkan12_features.runtimeDescriptorArray = VK_TRUE;
+		vulkan12_features.descriptorBindingPartiallyBound = VK_TRUE;
+		vulkan12_features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+		vulkan12_features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+		vulkan12_features.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
+		vulkan12_features.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
 
-		phys_device_selector.set_required_features_12(features);
+		vulkan12_features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+		vulkan12_features.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+		vulkan12_features.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
+
+		phys_device_selector.set_required_features_12(vulkan12_features);
 		phys_device_selector.defer_surface_initialization();
 		phys_device_selector.require_present();
 
 		VkPhysicalDeviceFeatures required_features = {};
 		required_features.fillModeNonSolid = VK_TRUE;
+		required_features.textureCompressionBC = VK_TRUE;
 		phys_device_selector.set_required_features(required_features);
 
 		auto result = phys_device_selector.select();

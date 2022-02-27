@@ -171,13 +171,15 @@ public:
 			//L"-Qstrip_debug",
 			//L"-Qstrip_reflect", 
 			L"-Qstrip_rootsignature", 
-			L"-Zi", 
 			L"-spirv",
 			L"-WX", 
 			L"-Zpr",
 			L"-Od",
 			L"-Oconfig=--loop-unroll",
 			L"-HV 2021",
+			L"-Wno-ambig-lit-shift",
+			L"-fspv-target-env=vulkan1.2",
+			L"-Zi",
 		};
 
 		/** Keep transient strings alive */

@@ -15,6 +15,23 @@
 namespace ze::gfx
 {
 
+VulkanDevice::VmaAllocatorWrapper::VmaAllocatorWrapper(VulkanDevice& in_device) : device(in_device)
+{
+	VmaAllocatorCreateInfo create_info = {};
+	create_info.instance = device.get_backend().get_instance();
+	create_info.device = device.get_device();
+	create_info.physicalDevice = device.get_physical_device();
+
+	VkResult result = vmaCreateAllocator(&create_info, &allocator);
+	if (result != VK_SUCCESS)
+		logger::fatal(log_vulkan, "Failed to create memory allocator");
+}
+
+VulkanDevice::VmaAllocatorWrapper::~VmaAllocatorWrapper()
+{
+	vmaDestroyAllocator(allocator);
+}
+
 /** FramebufferManager */
 void VulkanDevice::FramebufferManager::new_frame()
 {
@@ -71,33 +88,19 @@ VkFramebuffer VulkanDevice::FramebufferManager::get_or_create(VkRenderPass in_re
 
 VulkanDevice::VulkanDevice(VulkanBackend& in_backend, vkb::Device&& in_device) :
 	backend(in_backend),
-	allocator(nullptr),
 	device_wrapper(DeviceWrapper(std::move(in_device))),
+	vma_allocator(*this),
 	surface_manager(*this),
 	framebuffer_manager(*this),
 	descriptor_manager(*this)
 {
-	{
-		VmaAllocatorCreateInfo create_info = {};
-		create_info.instance = backend.get_instance();
-		create_info.device = device_wrapper.device.device;
-		create_info.physicalDevice = device_wrapper.device.physical_device.physical_device;
-
-		VkResult result = vmaCreateAllocator(&create_info, &allocator);
-		if (result != VK_SUCCESS)
-			logger::fatal(log_vulkan, "Failed to create memory allocator");
-	}
-
 	vkCmdBeginDebugUtilsLabelEXT = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
 		vkGetDeviceProcAddr(get_device(), "vkCmdBeginDebugUtilsLabelEXT"));
 	vkCmdEndDebugUtilsLabelEXT = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
 		vkGetDeviceProcAddr(get_device(), "vkCmdEndDebugUtilsLabelEXT"));
 }
 	
-VulkanDevice::~VulkanDevice()
-{
-	vmaDestroyAllocator(allocator);
-}
+VulkanDevice::~VulkanDevice() = default;
 
 void VulkanDevice::new_frame()
 {
@@ -198,7 +201,7 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_buffer(const Buffe
 	VkBuffer handle;
 	VmaAllocationInfo alloc_info;
 
-	VkResult result = vmaCreateBuffer(allocator, 
+	VkResult result = vmaCreateBuffer(get_allocator(),
 		&buffer_create_info, 
 		&alloc_create_info,
 		&handle,
@@ -641,14 +644,14 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture(const Text
 	if(in_create_info.usage_flags & TextureUsageFlagBits::Sampled)
 		create_info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 
+	if (in_create_info.usage_flags & TextureUsageFlagBits::UAV)
+		create_info.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+
 	if(in_create_info.usage_flags & TextureUsageFlagBits::TransferSrc)
 		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
 	if(in_create_info.usage_flags & TextureUsageFlagBits::TransferDst)
 		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-	//if (in_create_info.usage_flags & TextureUsageFlagBits::InputAttachment)
-	//	create_info.usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
 	if (in_create_info.usage_flags & TextureUsageFlagBits::Cube)
 		create_info.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
@@ -659,7 +662,7 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture(const Text
 
 	VkImage image;
 	VmaAllocation allocation;
-	VkResult result = vmaCreateImage(allocator,
+	VkResult result = vmaCreateImage(get_allocator(),
 		&create_info,
 		&alloc_create_info,
 		&image,
@@ -704,17 +707,27 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_texture_view(const
 		if (in_create_info.type == TextureViewType::Tex2D)
 		{
 			srv_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::Texture2D, false);
-			uav_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::Texture2D, true);
 		}
 		else if (in_create_info.type == TextureViewType::TexCube)
 		{
 			srv_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::TextureCube, false);
+		}
+
+		descriptor_manager.update_descriptor(srv_index, create_info.viewType, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	}
+
+	if (texture->get_image_usage_flags() & VK_IMAGE_USAGE_STORAGE_BIT)
+	{
+		if (in_create_info.type == TextureViewType::Tex2D)
+		{
+			uav_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::Texture2D, true);
+		}
+		else if (in_create_info.type == TextureViewType::TexCube)
+		{
 			uav_index = descriptor_manager.allocate_index(VulkanDescriptorManager::DescriptorType::TextureCube, true);
 		}
 
-		VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		descriptor_manager.update_descriptor(srv_index, create_info.viewType, view, layout);
-		descriptor_manager.update_descriptor(uav_index, create_info.viewType, view, layout);
+		descriptor_manager.update_descriptor(uav_index, create_info.viewType, view, VK_IMAGE_LAYOUT_GENERAL);
 	}
 
 	auto ret = new_resource<VulkanTextureView>(*this, view, srv_index, uav_index);
@@ -977,7 +990,7 @@ Result<void*, GfxResult> VulkanDevice::map_buffer(const BackendDeviceResource& i
 	void* data = nullptr;
 
 	auto buffer = get_resource<VulkanBuffer>(in_buffer);
-	VkResult result = vmaMapMemory(allocator,
+	VkResult result = vmaMapMemory(get_allocator(),
 		buffer->get_allocation(),
 		&data);
 	if(result != VK_SUCCESS)
@@ -989,7 +1002,7 @@ Result<void*, GfxResult> VulkanDevice::map_buffer(const BackendDeviceResource& i
 void VulkanDevice::unmap_buffer(const BackendDeviceResource& in_buffer)
 {
 	auto buffer = get_resource<VulkanBuffer>(in_buffer);
-	vmaUnmapMemory(allocator, buffer->get_allocation());
+	vmaUnmapMemory(get_allocator(), buffer->get_allocation());
 }
 
 /** Swapchain */
@@ -1051,6 +1064,12 @@ GfxResult VulkanDevice::wait_for_fences(const std::span<BackendDeviceResource>& 
 		fences.data(),
 		in_wait_for_all,
 		in_timeout));
+}
+
+GfxResult VulkanDevice::get_fence_status(const BackendDeviceResource in_fence)
+{
+	return convert_result(vkGetFenceStatus(get_device(),
+		get_resource<VulkanFence>(in_fence)->get_fence()));
 }
 
 void VulkanDevice::reset_fences(const std::span<BackendDeviceResource>& in_fences)

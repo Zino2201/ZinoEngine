@@ -117,8 +117,9 @@ static constexpr size_t max_push_constant_size = 128;
 static constexpr uint32_t srv_storage_buffer_binding = 0;
 static constexpr uint32_t uav_storage_buffer_binding = 1;
 static constexpr uint32_t srv_texture_2D_binding = 2;
-static constexpr uint32_t srv_texture_cube_binding = 3;
-static constexpr uint32_t srv_sampler_binding = 4;
+static constexpr uint32_t uav_texture_2D_binding = 3;
+static constexpr uint32_t srv_texture_cube_binding = 4;
+static constexpr uint32_t srv_sampler_binding = 5;
 static constexpr uint32_t max_descriptors_per_binding = 1024;
 
 }

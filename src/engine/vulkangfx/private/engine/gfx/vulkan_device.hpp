@@ -21,6 +21,15 @@ class VulkanDevice final : public BackendDevice
 		explicit DeviceWrapper(vkb::Device&& in_device) : device(in_device) {}
 		~DeviceWrapper() { vkb::destroy_device(device); }
 	};
+
+	struct VmaAllocatorWrapper
+	{
+		VulkanDevice& device;
+		VmaAllocator allocator;
+
+		VmaAllocatorWrapper(VulkanDevice& device);
+		~VmaAllocatorWrapper();
+	};
 	
 	/** Small facility to manage VkSurfaceKHRs */
 	class SurfaceManager
@@ -244,7 +253,7 @@ public:
 	GfxResult wait_for_fences(const std::span<BackendDeviceResource>& in_fences, 
 		const bool in_wait_for_all, 
 		const uint64_t in_timeout) override;
-
+	GfxResult get_fence_status(const BackendDeviceResource in_fence) override;
 	void reset_fences(const std::span<BackendDeviceResource>& in_fences) override;
 	
 	void queue_submit(const QueueType& in_type,
@@ -257,13 +266,13 @@ public:
 	[[nodiscard]] VulkanBackend& get_backend() const { return backend; }
 	[[nodiscard]] VkDevice get_device() const { return device_wrapper.device.device; }
 	[[nodiscard]] VkPhysicalDevice get_physical_device() const { return device_wrapper.device.physical_device.physical_device; }
-	[[nodiscard]] VmaAllocator get_allocator() const { return allocator; }
+	[[nodiscard]] VmaAllocator get_allocator() const { return vma_allocator.allocator; }
 	[[nodiscard]] VkQueue get_present_queue() { return device_wrapper.device.get_queue(vkb::QueueType::graphics).value(); }
 	[[nodiscard]] VulkanDescriptorManager& get_descriptor_manager() { return descriptor_manager; }
 private:
 	VulkanBackend& backend;
-	VmaAllocator allocator;
 	DeviceWrapper device_wrapper;
+	VmaAllocatorWrapper vma_allocator;
 	SurfaceManager surface_manager;
 	FramebufferManager framebuffer_manager;
 	VulkanDescriptorManager descriptor_manager;
