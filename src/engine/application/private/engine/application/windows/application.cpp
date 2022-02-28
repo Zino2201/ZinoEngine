@@ -179,7 +179,7 @@ LRESULT WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, 
 		case WM_SYSKEYUP:
 		case WM_KEYUP:
 		{
-			const int32_t key_code = in_wparam;
+			const int32_t key_code = static_cast<int32_t>(in_wparam);
 			const bool is_repeat = (in_lparam & 0x40000000) != 0;
 			const uint32_t character_code = ::MapVirtualKeyW(key_code, MAPVK_VK_TO_CHAR);
 			message_handler->on_key_up(convert_win_character_code(key_code), character_code, is_repeat);

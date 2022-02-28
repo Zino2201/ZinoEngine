@@ -14,7 +14,7 @@ bool ShaderInstance::set_parameter(const std::string& in_name, gfx::BufferHandle
 {
 	if (const auto* parameter_info = permutation.get_parameter_info(in_name))
 	{
-		uint32_t index = -1;
+		uint32_t index = std::numeric_limits<uint32_t>::max();
 
 		if(parameter_info->is_uav)
 			index = gfx::get_device()->get_uav_descriptor_index(in_buffer);
@@ -99,7 +99,7 @@ void ShaderInstance::bind(gfx::CommandListHandle in_handle)
 		get_device()->cmd_push_constants(in_handle, 
 			permutation.get_shader_stage_flags(), 
 			0, 
-			permutation.get_parameters_size(), 
+			static_cast<uint32_t>(permutation.get_parameters_size()),
 			push_constant_data.data());
 
 	for (const auto& [stage, shader] : permutation.get_shader_map())

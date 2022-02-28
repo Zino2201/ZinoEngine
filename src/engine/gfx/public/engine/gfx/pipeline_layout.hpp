@@ -120,7 +120,7 @@ static constexpr uint32_t srv_texture_2D_binding = 2;
 static constexpr uint32_t uav_texture_2D_binding = 3;
 static constexpr uint32_t srv_texture_cube_binding = 4;
 static constexpr uint32_t srv_sampler_binding = 5;
-static constexpr uint32_t max_descriptors_per_binding = 1024;
+static constexpr uint32_t max_descriptors_per_binding = 4096;
 
 }
 

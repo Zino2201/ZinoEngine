@@ -51,7 +51,7 @@ struct ShaderReflectionResource
 
 struct ShaderReflectionPushConstant
 {
-	uint32_t size;
+	size_t size;
 	std::vector<ShaderReflectionMember> members;
 };
 

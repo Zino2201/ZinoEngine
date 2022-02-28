@@ -197,8 +197,8 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 
 			render_graph.set_backbuffer_attachment("backbuffer",
 				get_device()->get_swapchain_backbuffer_view(renderer_data->window.get_swapchain()),
-				viewport->Size.x,
-				viewport->Size.y);
+				static_cast<uint32_t>(viewport->Size.x),
+				static_cast<uint32_t>(viewport->Size.y));
 
 			render_graph.compile();
 			render_graph.execute(list);

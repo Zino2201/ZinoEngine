@@ -1,4 +1,5 @@
 #include "engine/gfx/utils/mipmap_generation.hpp"
+#define A_STATIC
 #define A_CPU
 #include "ffx-spd/ffx_a.h"
 #include "ffx-spd/ffx_spd.h"
@@ -24,9 +25,8 @@ void generate_mipmaps(shadersystem::ShaderManager& in_shader_manager,
 		varAU4(rect_info) = initAU4(0, 0, in_width, in_height);
 		SpdSetup(dispatch_thread_group_count, work_group_offset, work_group_and_mip_count, rect_info);
 
-		constexpr uint32_t initial_value = 0;
 		UniqueBuffer global_atomic_counter = UniqueBuffer(get_device()->create_buffer(
-			BufferInfo::make_ssbo(sizeof(uint32_t))// { reinterpret_cast<const uint8_t*>(&initial_value), sizeof(initial_value)}
+			BufferInfo::make_ssbo(sizeof(uint32_t))
 				.set_debug_name("Mipmap Gen Global Atomic Counter")).get_value());
 
 		std::vector<UniqueTextureView> mips;

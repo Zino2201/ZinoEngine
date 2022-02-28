@@ -81,7 +81,7 @@ namespace std
 template<>
 struct hash<ze::renderer::RenderNode::MeshData>
 {
-	uint64_t operator()(const ze::renderer::RenderNode::MeshData& in_mesh_data) const noexcept
+	uint64_t operator()(const ze::renderer::RenderNode::MeshData&) const noexcept
 	{
 		uint64_t hash = 0;
 		//ze::hash_combine(hash, in_mesh_data.vertex_buffer);

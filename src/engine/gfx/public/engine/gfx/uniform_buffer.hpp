@@ -34,7 +34,7 @@ public:
 
 	~GPUBuffer()
 	{
-		if(mapped_data)
+		if(buffer && mapped_data)
 			get_device()->unmap_buffer(buffer.get());
 	}
 

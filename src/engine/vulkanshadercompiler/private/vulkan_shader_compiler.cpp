@@ -45,7 +45,7 @@ public:
 			}
 
 			IDxcBlobEncoding* blob;
-			utils->CreateBlob(str.data(), str.size(), DXC_CP_ACP, &blob);
+			utils->CreateBlob(str.data(), static_cast<uint32_t>(str.size()), DXC_CP_ACP, &blob);
 			blob->AddRef();
 			*ppIncludeSource = blob;
 		}
@@ -321,7 +321,8 @@ public:
 						spv_compiler.type_struct_member_offset(type, i) });
 				}
 
-				output.reflection_data.push_constants.emplace_back(spv_compiler.get_declared_struct_size(type), members);
+				output.reflection_data.push_constants.emplace_back(spv_compiler.get_declared_struct_size(type), 
+					members);
 			}
 		}
 		else

@@ -203,7 +203,7 @@ Result<ShaderDeclaration, std::string> compile_zeshader(std::unique_ptr<std::str
 			{
 				current_hlsl_stage = &declaration.passes.back().common_hlsl;
 			}
-			else if(blocks.top() != BlockType::ZESHADER_PARAMETERS)
+			else if(blocks.top() != BlockType::ZESHADER_PARAMETERS && blocks.top() != BlockType::ZESHADER_SHADER)
 			{
 				current_hlsl_stage->push_back(c);
 			}

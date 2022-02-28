@@ -289,11 +289,17 @@ void VulkanDescriptorManager::flush_updates()
 
 		for (const auto update : sampler_updates)
 		{
+#if ZE_BUILD(IS_DEBUG)
 			auto& info = infos.emplace_back(VkDescriptorImageInfo{
 				update.sampler == VK_NULL_HANDLE ? dummy_sampler : update.sampler,
 				VK_NULL_HANDLE,
 				VK_IMAGE_LAYOUT_UNDEFINED });
-
+#else
+			auto& info = infos.emplace_back(VkDescriptorImageInfo{
+				update.sampler,
+				VK_NULL_HANDLE,
+				VK_IMAGE_LAYOUT_UNDEFINED });
+#endif
 			writes.emplace_back(
 				VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 				nullptr,

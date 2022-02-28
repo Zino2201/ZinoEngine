@@ -211,11 +211,10 @@ void RenderGraph::build_barriers()
 
 		for(auto input : pass->get_attachment_inputs())
 		{
-			AttachmentResource& resource = static_cast<AttachmentResource&>(*resources[input]);
+			auto& resource = static_cast<AttachmentResource&>(*resources[input]);
 			if (resource.get_usage_flags() & TextureUsageFlagBits::DepthStencilAttachment)
 				continue;
 
-			auto& state = states[resource.get_physical_index()];
 			barriers.flushs.emplace_back(input,
 				TextureLayout::ColorAttachment,
 				AccessFlagBits::ColorAttachmentWrite,
@@ -227,7 +226,6 @@ void RenderGraph::build_barriers()
 
 		for (auto output : pass->get_color_outputs())
 		{
-			auto& state = states[resources[output]->get_physical_index()];
 			barriers.flushs.emplace_back(output,
 				TextureLayout::Undefined,
 				AccessFlags(),

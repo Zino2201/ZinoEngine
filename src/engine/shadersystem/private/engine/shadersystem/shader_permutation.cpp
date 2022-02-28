@@ -116,7 +116,7 @@ void ShaderPermutation::compile()
 					}
 
 					push_constant_range.stage |= stage;
-					push_constant_range.size = push_constant.size;
+					push_constant_range.size = static_cast<uint32_t>(push_constant.size);
 					parameters_size = push_constant.size;
 				}
 			}
