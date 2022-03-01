@@ -58,6 +58,7 @@ Result<std::unique_ptr<BackendDevice>, std::string> VulkanBackend::create_device
 		VkPhysicalDeviceFeatures required_features = {};
 		required_features.fillModeNonSolid = VK_TRUE;
 		required_features.textureCompressionBC = VK_TRUE;
+		required_features.samplerAnisotropy = VK_TRUE;
 		phys_device_selector.set_required_features(required_features);
 
 		auto result = phys_device_selector.select();

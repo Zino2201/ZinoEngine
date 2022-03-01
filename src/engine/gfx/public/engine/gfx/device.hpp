@@ -390,19 +390,18 @@ struct BufferInfo : public DeviceResourceInfo<BufferInfo>
 struct TextureInfo : public DeviceResourceInfo<TextureInfo>
 {
 	TextureCreateInfo info;
-
-	/** Mip0 initial data */
-	std::span<uint8_t> initial_data;
+	std::vector<std::span<uint8_t>> initial_mip_data;
 
 	explicit TextureInfo(const TextureCreateInfo& in_info,
-		const std::span<uint8_t>& in_initial_data = {}) : info(in_info),
-		initial_data(in_initial_data) {}
+		const std::vector<std::span<uint8_t>>& in_initial_mip_data = {}) : info(in_info),
+		initial_mip_data(in_initial_mip_data) {}
 
 	static TextureInfo make_immutable_2d(const uint32_t in_width, 
 		const uint32_t in_height,
-		const Format in_format, const uint32_t in_mip_levels = 1, 
+		const Format in_format, 
+		const uint32_t in_mip_levels = 1, 
 		const TextureUsageFlags in_usage_flags = TextureUsageFlags(TextureUsageFlagBits::Sampled),
-		const std::span<uint8_t>& in_initial_data = {})
+		const std::vector<std::span<uint8_t>>& in_initial_datas = {})
 	{
 		return TextureInfo(TextureCreateInfo(TextureType::Tex2D,
 			MemoryUsage::GpuOnly,
@@ -413,14 +412,14 @@ struct TextureInfo : public DeviceResourceInfo<TextureInfo>
 			in_mip_levels,
 			1,
 			SampleCountFlagBits::Count1,
-			in_usage_flags), in_initial_data);
+			in_usage_flags), in_initial_datas);
 	}
 
 	static TextureInfo make_immutable_cube(const uint32_t in_width,
 		const uint32_t in_height,
 		const Format in_format, const uint32_t in_mip_levels = 1,
 		const TextureUsageFlags in_usage_flags = TextureUsageFlags(TextureUsageFlagBits::Sampled | gfx::TextureUsageFlagBits::Cube),
-		const std::span<uint8_t>& in_initial_data = {})
+		const std::vector<std::span<uint8_t>>& in_initial_datas = {})
 	{
 		return TextureInfo(TextureCreateInfo(TextureType::Tex2D,
 			MemoryUsage::GpuOnly,
@@ -431,7 +430,7 @@ struct TextureInfo : public DeviceResourceInfo<TextureInfo>
 			in_mip_levels,
 			6,
 			SampleCountFlagBits::Count1,
-			in_usage_flags | gfx::TextureUsageFlagBits::Cube), in_initial_data );
+			in_usage_flags | gfx::TextureUsageFlagBits::Cube), in_initial_datas );
 	}
 
 	static TextureInfo make_depth_stencil_attachment(const uint32_t in_width, 

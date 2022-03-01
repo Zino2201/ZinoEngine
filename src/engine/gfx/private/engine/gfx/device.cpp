@@ -374,29 +374,13 @@ Result<TextureHandle, GfxResult> Device::create_texture(TextureInfo in_create_in
 		in_create_info.debug_name);
 	auto handle = cast_resource_ptr<TextureHandle>(texture);
 
-	if(!in_create_info.initial_data.empty())
+	if(!in_create_info.initial_mip_data.empty())
 	{
 		ZE_CHECKF(format_to_aspect_flags(in_create_info.info.format) == TextureAspectFlags(TextureAspectFlagBits::Color),
 			"Only color texture formats support uploading initial data !");
 
-		/** Create a staging buffer containing our initial data */
-		UniqueBuffer staging(create_buffer(BufferInfo::make_staging(in_create_info.initial_data.size(),
-			in_create_info.initial_data).set_debug_name("Copy Staging Buffer (create_texture)")).get_value());
-
 		/** Transition our fresh texture to TransferDst */
 		auto list = allocate_cmd_list(QueueType::Gfx);
-		std::array regions =
-		{
-			BufferTextureCopyRegion(0, 
-				TextureSubresourceLayers(format_to_aspect_flags(texture->get_create_info().format),
-				0,
-				0,
-				in_create_info.info.array_layers),
-				Offset3D(),
-				Extent3D(texture->get_create_info().width, 
-				texture->get_create_info().height,
-				texture->get_create_info().depth))
-		};
 		cmd_texture_barrier(list,
 			handle,
 			PipelineStageFlags(PipelineStageFlagBits::TopOfPipe),
@@ -405,11 +389,42 @@ Result<TextureHandle, GfxResult> Device::create_texture(TextureInfo in_create_in
 			PipelineStageFlags(PipelineStageFlagBits::Transfer),
 			TextureLayout::TransferDst,
 			AccessFlags(AccessFlagBits::TransferWrite));
-		cmd_copy_buffer_to_texture(list,
-			staging.get(),
-			handle,
-			TextureLayout::TransferDst,
-			regions);
+
+		uint32_t mip_width = texture->get_create_info().width;
+		uint32_t mip_height = texture->get_create_info().height;
+
+		for(size_t i = 0; i < in_create_info.initial_mip_data.size(); ++i)
+		{
+			/** Create a staging buffer containing our initial data */
+			UniqueBuffer staging(create_buffer(BufferInfo::make_staging(in_create_info.initial_mip_data[i].size(),
+				in_create_info.initial_mip_data[i]).set_debug_name("Copy Staging Buffer (create_texture)")).get_value());
+
+			std::array regions =
+			{
+				BufferTextureCopyRegion(0,
+					TextureSubresourceLayers(format_to_aspect_flags(texture->get_create_info().format),
+					i,
+					0,
+					in_create_info.info.array_layers),
+					Offset3D(),
+					Extent3D(mip_width,
+						mip_height,
+						1))
+			};
+
+			cmd_copy_buffer_to_texture(list,
+				staging.get(),
+				handle,
+				TextureLayout::TransferDst,
+				regions);
+
+			if(mip_width > 1)
+				mip_width /= 2;
+
+			if(mip_height > 1)
+				mip_height /= 2;
+		}
+
 		cmd_texture_barrier(list,
 			handle,
 			PipelineStageFlags(PipelineStageFlagBits::Transfer),
@@ -418,6 +433,7 @@ Result<TextureHandle, GfxResult> Device::create_texture(TextureInfo in_create_in
 			PipelineStageFlags(PipelineStageFlagBits::FragmentShader),
 			TextureLayout::ShaderReadOnly,
 			AccessFlags(AccessFlagBits::ShaderRead));
+
 		submit(list);
 	}
 

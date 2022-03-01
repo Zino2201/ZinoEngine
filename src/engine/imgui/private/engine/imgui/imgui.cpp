@@ -233,7 +233,7 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 			Format::R8G8B8A8Srgb,
 			1,
 			TextureUsageFlags(TextureUsageFlagBits::Sampled),
-			{ data, data + (width * height * 4)}).set_debug_name("ImGui Font Texture"));
+			{ { data, data + (width * height * 4)} }).set_debug_name("ImGui Font Texture"));
 		ZE_ASSERTF(tex_result.has_value(), "Failed to create ImGui font texture: {}", std::to_string(tex_result.get_error()));
 
 		font_texture = tex_result.get_value();
