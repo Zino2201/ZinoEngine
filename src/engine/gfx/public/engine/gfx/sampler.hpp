@@ -17,6 +17,12 @@ enum class SamplerAddressMode
 	ClampToBorder
 };
 
+enum class SamplerBorderColor
+{
+	WhiteIntegerOpaque,
+	WhiteFloatOpaque,
+};
+
 struct SamplerCreateInfo
 {
 	Filter min_filter;
@@ -31,6 +37,7 @@ struct SamplerCreateInfo
 	float max_anisotropy;
 	float min_lod;
 	float max_lod;
+	SamplerBorderColor border_color;
 
 	SamplerCreateInfo(
 		const Filter& in_min_filter = Filter::Linear,
@@ -44,13 +51,14 @@ struct SamplerCreateInfo
 		const bool in_enable_aniostropy = false,
 		const float in_max_anisotropy = 0.f,
 		const float in_min_lod = 0.f,
-		const float in_max_lod = std::numeric_limits<float>::max()) :
+		const float in_max_lod = std::numeric_limits<float>::max(),
+		const SamplerBorderColor in_border_color = SamplerBorderColor::WhiteIntegerOpaque) :
 		min_filter(in_min_filter), mag_filter(in_mag_filter),
 		mip_map_mode(in_mip_map_mode), address_mode_u(in_address_mode_u),
 		address_mode_v(in_address_mode_v), address_mode_w(in_address_mode_w),
 		mip_lod_bias(in_mip_lod_bias), compare_op(in_compare_op),
 		enable_anisotropy(in_enable_aniostropy), max_anisotropy(in_max_anisotropy),
-		min_lod(in_min_lod), max_lod(in_max_lod) {}
+		min_lod(in_min_lod), max_lod(in_max_lod), border_color(in_border_color) {}
 };
 
 }

@@ -71,6 +71,8 @@ enum class KeyCode
 	RightAlt,
 	LeftShift,
 	RightShift,
+	Space,
+	Backspace,
 	F1,
 	F2,
 	F3,
@@ -104,6 +106,7 @@ public:
 	virtual void on_cursor_set() {}
 	virtual void on_key_down(const KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat) { UnusedParameters{ in_key_code, in_character_code, in_repeat }; }
 	virtual void on_key_up(const KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat) { UnusedParameters{ in_key_code, in_character_code, in_repeat }; }
+	virtual void on_key_char(const char in_char) { UnusedParameters{ in_char }; }
 	virtual void on_mouse_move(const glm::ivec2& in_delta) { UnusedParameters{ in_delta }; }
 };
 

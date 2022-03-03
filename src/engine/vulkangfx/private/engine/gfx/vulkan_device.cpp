@@ -753,6 +753,7 @@ Result<BackendDeviceResource, GfxResult> VulkanDevice::create_sampler(const Samp
 	create_info.maxAnisotropy = in_create_info.max_anisotropy;
 	create_info.minLod = in_create_info.min_lod;
 	create_info.maxLod = in_create_info.max_lod;
+	create_info.borderColor = convert_border_color(in_create_info.border_color);
 
 	VkSampler sampler;
 	VkResult result = vkCreateSampler(get_device(),

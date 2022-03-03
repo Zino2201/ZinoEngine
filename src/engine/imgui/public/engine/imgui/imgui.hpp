@@ -98,5 +98,6 @@ void on_resized_window(platform::Window& in_window, uint32_t in_width, uint32_t 
 void on_cursor_set();
 void on_key_down(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat);
 void on_key_up(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat);
+void on_key_char(const char in_char);
 
 }

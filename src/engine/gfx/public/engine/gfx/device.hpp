@@ -673,7 +673,7 @@ class Device final
 		}
 	};
 public:
-	static constexpr size_t max_frames_in_flight = 2;
+	static constexpr size_t max_frames_in_flight = 1;
 
 	Device(Backend& in_backend, std::unique_ptr<BackendDevice>&& in_backend_device);
 	~Device();

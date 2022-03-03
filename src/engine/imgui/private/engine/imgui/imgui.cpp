@@ -644,20 +644,29 @@ static ImGuiKey virtual_key_to_imgui_key(platform::KeyCode in_key_code)
 	case platform::KeyCode::RightAlt: return ImGuiKey_RightAlt;
 	case platform::KeyCode::LeftShift: return ImGuiKey_LeftShift;
 	case platform::KeyCode::RightShift: return ImGuiKey_RightShift;
+	case platform::KeyCode::Space: return ImGuiKey_Space;
+	case platform::KeyCode::Backspace: return ImGuiKey_Backspace;
 	default: return ImGuiKey_None;
 	}
 }
 
 void on_key_down(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat)
 {
-	ImGui::GetIO().AddKeyEvent(virtual_key_to_imgui_key(in_key_code), true);
+	if(in_key_code != platform::KeyCode::None)
+		ImGui::GetIO().AddKeyEvent(virtual_key_to_imgui_key(in_key_code), true);
 	UnusedParameters{ in_character_code, in_repeat };
 }
 
 void on_key_up(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat)
 {
-	ImGui::GetIO().AddKeyEvent(virtual_key_to_imgui_key(in_key_code), false);
+	if(in_key_code != platform::KeyCode::None)
+		ImGui::GetIO().AddKeyEvent(virtual_key_to_imgui_key(in_key_code), false);
 	UnusedParameters{ in_character_code, in_repeat };
+}
+
+void on_key_char(const char in_char)
+{
+	ImGui::GetIO().AddInputCharacter(in_char);
 }
 
 }

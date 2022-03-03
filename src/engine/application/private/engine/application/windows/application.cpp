@@ -3,6 +3,8 @@
 #include "engine/application/windows/cursor.hpp"
 #include "engine/application/message_handler.hpp"
 #include <ShellScalingApi.h>
+#include "boost/locale/conversion.hpp"
+#include "boost/locale/encoding_utf.hpp"
 
 namespace ze::platform
 {
@@ -163,6 +165,14 @@ LRESULT WindowsApplication::wnd_proc(WindowsWindow& in_window, uint32_t in_msg, 
 		}
 		case WM_CHAR:
 		{
+			if(in_wparam > 0 && in_wparam < 0x10000)
+			{
+				std::wstring ch16;
+				ch16.push_back(static_cast<wchar_t>(in_wparam));
+
+				const std::string ch8 = boost::locale::conv::utf_to_utf<char, wchar_t>(ch16);
+				message_handler->on_key_char(ch8[0]);
+			}
 			return 0;
 		}
 		case WM_SYSKEYDOWN:
@@ -432,6 +442,8 @@ KeyCode WindowsApplication::convert_win_character_code(int32_t in_character_code
 	case VK_RMENU: return KeyCode::RightAlt;
 	case VK_SHIFT: return KeyCode::LeftShift;
 	case VK_RSHIFT: return KeyCode::RightShift;
+	case VK_SPACE: return KeyCode::Space;
+	case VK_BACK: return KeyCode::Backspace;
 	default: return KeyCode::None;
 	}
 }

@@ -18,7 +18,7 @@ ShaderPermutation::ShaderPermutation(Shader& in_shader, ShaderPermutationId in_i
 
 void ShaderPermutation::compile()
 {
-	auto compile_stage = [](const Shader& shader, const ShaderPermutationId& id, const ShaderStage& in_stage)
+	auto compile_stage = [](const Shader& shader, const ShaderPermutationId& id, const ShaderStage& in_stage, const std::string& in_common_hlsl)
 	{
 		gfx::ShaderCompilerInput input;
 		input.name = fmt::format("{} (pass {}, options {}, stage {})",
@@ -30,7 +30,7 @@ void ShaderPermutation::compile()
 		input.target_format = shader.get_shader_manager().get_shader_format();
 		input.entry_point = "main";
 
-		std::string code = shader.get_declaration().common_hlsl + in_stage.hlsl;
+		std::string code = shader.get_declaration().common_hlsl + in_common_hlsl + in_stage.hlsl;
 		input.code = { reinterpret_cast<uint8_t*>(code.data()), reinterpret_cast<uint8_t*>(code.data()) + code.size() };
 
 		return compile_shader(input);
@@ -54,7 +54,7 @@ void ShaderPermutation::compile()
 					jobsystem::Job* stage_job = new_child_job(
 						[&, stage](jobsystem::Job&)
 						{
-							outputs.insert({ stage.stage, compile_stage(shader, id, stage) });
+							outputs.insert({ stage.stage, compile_stage(shader, id, stage, pass.common_hlsl) });
 						}, root_compilation_job, jobsystem::JobType::Normal, 0.f);
 					group.add(stage_job);
 				}

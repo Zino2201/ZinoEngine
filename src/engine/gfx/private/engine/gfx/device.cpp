@@ -120,6 +120,9 @@ Device::Device(Backend& in_backend,
 {
 	current_device = this;
 
+	if (max_frames_in_flight == 1)
+		logger::warn(log_gfx_device, "Using only one in-flight frame, except suboptimal performances.");
+
 	for(size_t i = 0; i < max_frames_in_flight; ++i)
 		frames.emplace_back(std::make_unique<Frame>());
 }

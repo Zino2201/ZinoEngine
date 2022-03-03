@@ -83,4 +83,17 @@ inline VkSamplerAddressMode convert_address_mode(SamplerAddressMode in_address_m
 	ZE_UNREACHABLE();
 }
 
+inline VkBorderColor convert_border_color(SamplerBorderColor in_border_color)
+{
+	switch(in_border_color)
+	{
+	case SamplerBorderColor::WhiteFloatOpaque:
+		return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+	case SamplerBorderColor::WhiteIntegerOpaque:
+		return VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+	}
+
+	ZE_UNREACHABLE();
+}
+
 }
