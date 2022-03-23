@@ -14,8 +14,10 @@ std::pair<TextureHandle, TextureViewHandle> PhysicalResourceRegistry::get_textur
 	ZE_CHECKF(texture_result.has_value(), "Failed to create render graph texture: {}", std::to_string(texture_result.get_error()));
 
 	TextureAspectFlags aspect_flags = TextureAspectFlagBits::Color;
-	if (in_info.info.format == Format::D32Sfloat
-		|| in_info.info.format == Format::D24UnormS8Uint || in_info.info.format == Format::D32SfloatS8Uint)
+	if (in_info.info.format == Format::D32Sfloat || 
+		in_info.info.format == Format::D24UnormS8Uint || 
+		in_info.info.format == Format::D32SfloatS8Uint ||
+		in_info.info.format == Format::D16Unorm)
 		aspect_flags = TextureAspectFlagBits::Depth;
 
 	auto texture_view_result = get_device()->create_texture_view(TextureViewInfo

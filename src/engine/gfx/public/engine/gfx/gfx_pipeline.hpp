@@ -414,7 +414,7 @@ struct GfxPipelineCreateInfo
 
 	bool operator==(const GfxPipelineCreateInfo& in_create_info) const
 	{
-		return shader_stages.data() == in_create_info.shader_stages.data() &&
+		return std::ranges::equal(shader_stages, in_create_info.shader_stages) &&
 			vertex_input_state == in_create_info.vertex_input_state &&
 			input_assembly_state == in_create_info.input_assembly_state &&
 			rasterization_state == in_create_info.rasterization_state &&
@@ -558,7 +558,7 @@ template<> struct hash<ze::gfx::GfxPipelineCreateInfo>
 {
 	uint64_t operator()(const ze::gfx::GfxPipelineCreateInfo& in_create_info) const noexcept
 	{
-		uint64_t hash = 0;
+		uint64_t hash = std::hash<uint32_t>()(in_create_info.subpass);
 
 		for(const auto& stage : in_create_info.shader_stages)
 			ze::hash_combine(hash, stage);
@@ -570,7 +570,6 @@ template<> struct hash<ze::gfx::GfxPipelineCreateInfo>
 		ze::hash_combine(hash, in_create_info.depth_stencil_state);
 		ze::hash_combine(hash, in_create_info.pipeline_layout);
 		ze::hash_combine(hash, in_create_info.render_pass);
-		ze::hash_combine(hash, in_create_info.subpass);
 
 		return hash;
 	}

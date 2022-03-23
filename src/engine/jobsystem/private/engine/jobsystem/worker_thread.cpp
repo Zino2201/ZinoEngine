@@ -4,19 +4,24 @@
 #include "engine/hal/thread.hpp"
 #include <random>
 #include "fmt/format.h"
+#include "engine/random.hpp"
+#if ZE_FEATURE(PROFILING)
+#include <Tracy.hpp>
+#endif
 
 namespace ze::jobsystem
 {
 
-bool WorkerThread::JobCompare::operator()(const Job* left, const Job* right) const
-{
-	return left->get_priority() < right->get_priority();
-}
-
 WorkerThread::WorkerThread(size_t in_index)
 	: index(in_index),
 	active(true),
-	thread([&] { run(); }) {}
+	thread([&] { run(); })
+{
+	for(size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
+	{
+		consumer_tokens.emplace_back(job_queue);
+	}
+}
 
 WorkerThread::~WorkerThread()
 {
@@ -28,21 +33,16 @@ void WorkerThread::run()
 {
 	current_worker_idx = index;
 	hal::set_thread_name(thread.get_id(), fmt::format("Worker Thread {}", index));
-
-	/** TODO: FIX BUG JOB JAMAIS EXECUTE JEN AI MARRE */
-	constexpr uint32_t cycles_before_sleep = 100000;
-	uint32_t sleep_counter = 0;
+#if ZE_FEATURE(PROFILING)
+	tracy::SetThreadName(fmt::format("Worker Thread {}", index).c_str());
+#endif
 
 	while (active)
 	{
 		if (!flush_one())
 		{
-			if (++sleep_counter >= cycles_before_sleep)
-			{
-				sleep_counter = 0;
-				std::unique_lock lock(sleep_mutex);
-				global_sleep_var.wait(lock);
-			}
+			std::unique_lock lock(sleep_mutex);
+			global_sleep_var.wait(lock);
 		}
 	}
 }
@@ -60,25 +60,21 @@ bool WorkerThread::flush_one()
 
 void WorkerThread::enqueue(const Job* job)
 {
-	job_queue.push(job);
+	job_queue.enqueue(job);
 }
 
 const Job* WorkerThread::try_get_or_steal_job()
 {
 	const Job* job = nullptr;
-	if(!job_queue.try_pop(job))
+	if(!job_queue.try_dequeue(consumer_tokens[index], job))
 	{
-		std::random_device device;
-		std::mt19937 gen(device());
-		std::uniform_int_distribution<size_t> distribution(0, get_worker_count() - 1);
-
-		const size_t worker_idx = distribution(gen);
+		const size_t worker_idx = random_SM64<size_t>(0, get_worker_count() - 1);
 		auto& worker_to_steal = get_worker_by_idx(worker_idx);
 
 		if (this != &worker_to_steal)
 		{
 			const Job* stolen_job = nullptr;
-			if(worker_to_steal.job_queue.try_pop(stolen_job))
+			if(worker_to_steal.job_queue.try_dequeue(worker_to_steal.get_consumer_tokens()[index], stolen_job))
 				return stolen_job;
 		}
 

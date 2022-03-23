@@ -2,6 +2,7 @@
 
 #include "engine/gfx/device.hpp"
 #include <any>
+#include <unordered_set>
 
 /**
  * A render graph implementation inspired by Hans-Kristian Arntzen's work
@@ -19,6 +20,7 @@ struct AttachmentInfo
 	Format format;
 	uint32_t width;
 	uint32_t height;
+	bool sampled = false;
 };
 
 enum class RenderPassQueueFlagBits
@@ -69,6 +71,8 @@ struct ResourceHandle
 
 	ResourceHandle(const uint32_t in_index = Resource::null_resource_idx) : index(in_index) {}
 
+	bool is_valid() const { return index != Resource::null_resource_idx; }
+
 	operator uint32_t() const { return index; }
 };
 
@@ -98,6 +102,7 @@ public:
 	virtual void execute(CommandListHandle in_list) = 0;
 
 	ResourceHandle add_attachment_input(const std::string& in_name);
+	ResourceHandle add_attachment_input(const ResourceHandle& in_handle);
 	void add_color_input(const std::string& in_name);
 	ResourceHandle add_color_output(const std::string& in_name, const AttachmentInfo& in_attachment, bool in_force_load = false);
 	ResourceHandle set_depth_stencil_input(const std::string& in_name);
@@ -106,13 +111,16 @@ public:
 	bool is_color_input(const ResourceHandle in_handle) const;
 	bool should_load(const ResourceHandle in_handle) const;
 
+	void add_dependency(RenderPass* in_render_pass);
+	void add_dependency(RenderPass& in_render_pass) { add_dependency(&in_render_pass); }
+
 	const auto& get_attachment_inputs() const { return attachment_inputs; }
 	const auto& get_color_inputs() const { return color_inputs; }
 	const auto& get_color_outputs() const { return color_outputs; }
-	const auto& get_subpasses() const { return subpasses; }
 	const auto& get_name() const { return name; }
 	const auto get_depth_stencil_input() const { return depth_stencil_input; }
 	const auto get_depth_stencil_output() const { return depth_stencil_output; }
+	const auto& get_dependencies() const { return dependencies; }
 private:
 	RenderGraph& graph;
 	std::string name;
@@ -122,7 +130,7 @@ private:
 	std::vector<ResourceHandle> color_outputs;
 	ResourceHandle depth_stencil_input;
 	ResourceHandle depth_stencil_output;
-	std::vector<RenderPass*> subpasses;
+	std::unordered_set<RenderPass*> dependencies;
 	std::vector<ResourceHandle> force_loads;
 };
 
@@ -220,12 +228,27 @@ public:
 	void execute(CommandListHandle in_list);
 
 	AttachmentResource& get_attachment_resource(const std::string& in_name);
+	AttachmentResource& get_attachment_resource(const ResourceHandle& in_idx) { return static_cast<AttachmentResource&>(*resources[in_idx.index]); }
+
 	TextureViewHandle get_handle_from_resource(ResourceHandle in_resource);
 	PhysicalResourceRegistry& get_registry() const { return physical_resource_registry; }
+	bool depends_on_pass(RenderPass* in_dst, RenderPass* in_src) const
+	{
+		if (in_dst == in_src)
+			return true;
+
+		for(auto& dependency : in_dst->get_dependencies())
+		{
+			if (depends_on_pass(dependency, in_src))
+				return true;
+		}
+
+		return false;
+	}
 private:
 	void validate();
-	void traverse_pass_dependencies(RenderPass* in_pass);
-	void add_pass_recursive(RenderPass* in_pass, const Resource& in_resource);
+	void traverse_pass_dependencies(RenderPass* in_pass, uint32_t stack_depth = 0);
+	void add_pass_recursive(RenderPass* in_pass, const std::vector<RenderPass*>& in_written_passes, uint32_t stack_depth);
 	void prune_duplicate_passes();
 	void order_passes();
 	void build_physical_resources();

@@ -66,6 +66,9 @@ public:
 	[[nodiscard]] BackendDeviceResource get_resource() const { return resource; }
 	[[nodiscard]] uint32_t get_srv_index() const { return srv_index; }
 	[[nodiscard]] uint32_t get_uav_index() const { return uav_index; }
+#if ZE_BUILD(IS_DEBUG)
+	[[nodiscard]] std::string get_debug_name() const { return debug_name; }
+#endif
 protected:
 	Device& device;
 	BackendDeviceResource resource;
@@ -834,9 +837,9 @@ private:
 	size_t current_frame;
 	std::vector<std::unique_ptr<Frame>> frames;
 
-	robin_hood::unordered_map<RenderPassCreateInfo, BackendDeviceResource> render_passes;
-	robin_hood::unordered_map<GfxPipelineCreateInfo, BackendDeviceResource> gfx_pipelines;
-	robin_hood::unordered_map<ComputePipelineCreateInfo, BackendDeviceResource> compute_pipelines;
+	std::unordered_map<RenderPassCreateInfo, BackendDeviceResource> render_passes;
+	std::unordered_map<GfxPipelineCreateInfo, BackendDeviceResource> gfx_pipelines;
+	std::unordered_map<ComputePipelineCreateInfo, BackendDeviceResource> compute_pipelines;
 	
 	/** Resources pools */
 	ThreadSafeSimplePool<detail::Buffer> buffers;

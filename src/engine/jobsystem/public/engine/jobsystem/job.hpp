@@ -28,6 +28,13 @@ enum class JobType
 	Lightweight,
 };
 
+enum class JobPriority
+{
+	High,
+	Normal,
+	Low,
+};
+
 /**
  * A job, must be constructed using new_job functions since jobs must not be allocated on the stack
  * new_job provide a safe way of constructing job while performant using a simple pool
@@ -40,19 +47,19 @@ public:
 	static constexpr size_t max_continuations = 16;
 	static constexpr size_t max_childs = 255;
 
-	Job(Function in_function, JobType in_type, const float in_priority = 0.f)
+	Job(Function in_function, JobType in_type, const JobPriority in_priority = JobPriority::Normal)
 		: type(in_type), parent(nullptr), function(in_function), priority(in_priority), unfinished_jobs(1) {}
 
 	template<typename UserDataType, typename... UserDataArgs>
 		requires (std::is_standard_layout_v<UserDataType> && sizeof(UserDataType) <= userdata_size)
-	Job(Function in_function, JobType in_type, const float in_priority = 0.f, UserDataArgs&&... in_args)
+	Job(Function in_function, JobType in_type, const JobPriority in_priority = JobPriority::Normal, UserDataArgs&&... in_args)
 		: type(in_type), parent(nullptr), function(in_function), priority(in_priority), unfinished_jobs(1)
 	{
 		new (get_userdata<UserDataType>()) UserDataType(std::forward<UserDataArgs>(in_args)...);
 	}
 
 	template<typename Lambda>
-	Job(Lambda in_lambda, JobType in_type, const float in_priority) :
+	Job(Lambda in_lambda, JobType in_type, const JobPriority in_priority) :
 		type(in_type), parent(nullptr), function(nullptr), priority(in_priority), unfinished_jobs(1)
 	{
 		function = [](Job& job)
@@ -65,7 +72,7 @@ public:
 	}
 
 	/** Child jobs ctor */
-	Job(Function in_function, Job* in_parent, JobType in_type, const float in_priority = 0.f)
+	Job(Function in_function, Job* in_parent, JobType in_type, const JobPriority in_priority = JobPriority::Normal)
 		: type(in_type), parent(in_parent), function(in_function), priority(in_priority), unfinished_jobs(1)
 	{
 		++in_parent->unfinished_jobs;
@@ -73,7 +80,7 @@ public:
 
 	template<typename UserDataType, typename... UserDataArgs>
 		requires (std::is_standard_layout_v<UserDataType> && sizeof(UserDataType) <= userdata_size)
-	Job(Function in_function, Job* in_parent, JobType in_type, const float in_priority = 0.f, UserDataArgs&&... in_args)
+	Job(Function in_function, Job* in_parent, JobType in_type, const JobPriority in_priority = JobPriority::Normal, UserDataArgs&&... in_args)
 		: type(in_type), parent(in_parent), function(in_function), priority(in_priority), unfinished_jobs(1)
 	{
 		++in_parent->unfinished_jobs;
@@ -81,7 +88,7 @@ public:
 	}
 
 	template<typename Lambda>
-	Job(Lambda in_lambda, Job* in_parent, JobType in_type, const float in_priority) :
+	Job(Lambda in_lambda, Job* in_parent, JobType in_type, const JobPriority in_priority) :
 		type(in_type), parent(in_parent), function(nullptr), priority(in_priority), unfinished_jobs(1)
 	{
 		++in_parent->unfinished_jobs;
@@ -105,7 +112,7 @@ public:
 		return reinterpret_cast<const T*>(userdata.data());
 	}
 
-	float get_priority() const { return priority; }
+	JobPriority get_priority() const { return priority; }
 	bool is_finished() const { return unfinished_jobs == 0; }
 	bool is_running() const { return unfinished_jobs > 0; }
 private:
@@ -114,7 +121,7 @@ private:
 	JobType type;
 	Job* parent;
 	Function function;
-	float priority;
+	JobPriority priority;
 
 	/** Unfinished job counts, accounting for childs. 0 = finished, 1 = not finished, > 1 not finished + childs not finished */
 	std::atomic_uint8_t unfinished_jobs;
@@ -132,14 +139,14 @@ JobPool& get_job_pool();
 
 }
 
-inline Job* new_job(Job::Function in_function, JobType in_type, const float in_priority = 0.f)
+inline Job* new_job(Job::Function in_function, JobType in_type, const JobPriority in_priority = JobPriority::Normal)
 {
 	return detail::get_job_pool().allocate(in_function, in_type, in_priority);
 }
 
 template<typename UserDataType, typename... UserDataArgs>
 	requires (std::is_standard_layout_v<UserDataType> && sizeof(UserDataType) <= Job::userdata_size)
-Job* new_job(Job::Function in_function, JobType in_type, const float in_priority = 0.f, UserDataArgs&&... in_args)
+Job* new_job(Job::Function in_function, JobType in_type, const JobPriority in_priority = JobPriority::Normal, UserDataArgs&&... in_args)
 {
 	auto job = new_job(in_function, in_type, in_priority);
 	new (job->get_userdata<UserDataType>()) UserDataType(std::forward<UserDataArgs>(in_args)...);
@@ -147,27 +154,27 @@ Job* new_job(Job::Function in_function, JobType in_type, const float in_priority
 }
 
 template<typename Lambda>
-Job* new_job(Lambda in_lambda, JobType in_type, const float in_priority)
+Job* new_job(Lambda in_lambda, JobType in_type, const JobPriority in_priority = JobPriority::Normal)
 {
 	return detail::get_job_pool().allocate(in_lambda, in_type, in_priority);
 }
 
-inline Job* new_child_job(Job::Function in_function, Job* in_parent, JobType in_type, const float in_priority = 0.f)
+inline Job* new_child_job(Job::Function in_function, Job* in_parent, JobType in_type, const JobPriority in_priority = JobPriority::Normal)
 {
 	return detail::get_job_pool().allocate(in_function, in_parent, in_type, in_priority);
 }
 
 template<typename UserDataType, typename... UserDataArgs>
 	requires (std::is_standard_layout_v<UserDataType> && sizeof(UserDataType) <= Job::userdata_size)
-Job* new_child_job(Job::Function in_function, Job* in_parent, JobType in_type, const float in_priority = 0.f, UserDataArgs&&... in_args)
+Job* new_child_job(Job::Function in_function, Job* in_parent, JobType in_type, const JobPriority in_priority = JobPriority::Normal, UserDataArgs&&... in_args)
 {
-	auto job = new_child_job(in_function, in_parent, in_type);
+	auto job = new_child_job(in_function, in_parent, in_type, in_priority);
 	new (job->get_userdata<UserDataType>()) UserDataType(std::forward<UserDataArgs>(in_args)...);
 	return job;
 }
 
 template<typename Lambda>
-Job* new_child_job(Lambda in_lambda, Job* in_parent, JobType in_type, const float in_priority)
+Job* new_child_job(Lambda in_lambda, Job* in_parent, JobType in_type, const JobPriority in_priority = JobPriority::Normal)
 {
 	return detail::get_job_pool().allocate(in_lambda, in_parent, in_type, in_priority);
 }

@@ -141,7 +141,7 @@ Device::~Device()
 		frame->reset();
 	}
 
-	for(auto& [create_info, pipeline] : gfx_pipelines)
+	for (auto& [create_info, pipeline] : gfx_pipelines)
 		get_backend_device()->destroy_pipeline(pipeline);
 
 	for(auto& [create_info, pipeline] : compute_pipelines)
@@ -149,6 +149,10 @@ Device::~Device()
 
 	for(auto& [create_info, rp] : render_passes)
 		get_backend_device()->destroy_render_pass(rp);
+
+	gfx_pipelines.clear();
+	compute_pipelines.clear();
+	render_passes.clear();
 
 	ZE_CHECKF(swapchains.get_size() == 0, "Some swapchains have not been freed before deleting the device!");
 	ZE_CHECKF(buffers.get_size() == 0, "Some buffers have not been freed before deleting the device!");
@@ -159,6 +163,8 @@ Device::~Device()
 	ZE_CHECKF(semaphores.get_size() == 0, "Some semaphores have not been freed before deleting the device!");
 	ZE_CHECKF(fences.get_size() == 0, "Some fences have not been freed before deleting the device!");
 	ZE_CHECKF(samplers.get_size() == 0, "Some samplers have not been freed before deleting the device!");
+	ZE_CHECKF(gfx_pipelines.empty(), "Some graphics pipelines have not been freed before deleting the device!");
+	ZE_CHECKF(compute_pipelines.empty(), "Some compute pipelines have not been freed before deleting the device!");
 }
 
 Device::Frame::Frame() : gfx_command_pool(QueueType::Gfx),
@@ -1076,6 +1082,9 @@ BackendDeviceResource Device::get_or_create_gfx_pipeline(const GfxPipelineCreate
 	auto pipeline = backend_device->create_gfx_pipeline(in_create_info);
 	ZE_ASSERT(pipeline.has_value());
 	gfx_pipelines.insert({ in_create_info, pipeline.get_value() });
+
+	static size_t idx = 0;
+	backend_device->set_resource_name(fmt::format("Gfx Pipeline {}", idx++), DeviceResourceType::Pipeline, pipeline.get_value());
 	return pipeline.get_value();
 }
 
@@ -1088,6 +1097,8 @@ BackendDeviceResource Device::get_or_create_compute_pipeline(const ComputePipeli
 	auto pipeline = backend_device->create_compute_pipeline(in_create_info);
 	ZE_ASSERT(pipeline.has_value());
 	compute_pipelines.insert({ in_create_info, pipeline.get_value() });
+	static size_t idx = 0;
+	backend_device->set_resource_name(fmt::format("Compute Pipeline {}", idx++), DeviceResourceType::Pipeline, pipeline.get_value());
 	return pipeline.get_value();
 }
 

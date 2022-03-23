@@ -73,33 +73,44 @@ void RenderGraph::compile()
 	build_barriers();
 }
 
-void RenderGraph::traverse_pass_dependencies(RenderPass* in_pass)
+void RenderGraph::traverse_pass_dependencies(RenderPass* in_pass, uint32_t stack_depth)
 {
 	if(in_pass->get_depth_stencil_input() != Resource::null_resource_idx)
 	{
-		add_pass_recursive(in_pass, *resources[in_pass->get_depth_stencil_input()]);
+		const auto& resource = *resources[in_pass->get_depth_stencil_input()];
+		add_pass_recursive(in_pass, resource.get_writes(), stack_depth);
 	}
 
 	for(auto input : in_pass->get_attachment_inputs())
 	{
+		const auto& resource = *resources[input];
 		if(std::ranges::find(in_pass->get_color_outputs(), input) == in_pass->get_color_outputs().end())
-			add_pass_recursive(in_pass, *resources[input]);
+			add_pass_recursive(in_pass, resource.get_writes(), stack_depth);
 	}
 
 	for(auto input : in_pass->get_color_inputs())
 	{
-		add_pass_recursive(in_pass, *resources[input]);
+		const auto& resource = *resources[input];
+		add_pass_recursive(in_pass, resource.get_writes(), stack_depth);
 	}
 }
 
-void RenderGraph::add_pass_recursive(RenderPass* in_pass, const Resource& in_resource)
+void RenderGraph::add_pass_recursive(RenderPass* in_pass,
+	const std::vector<RenderPass*>& in_written_passes, 
+	uint32_t stack_depth)
 {
-	for(auto pass : in_resource.get_writes())
+	ZE_CHECK(stack_depth < render_passes.size());
+
+	for (auto& dep : in_written_passes)
+		if (dep != in_pass)
+			in_pass->add_dependency(dep);
+
+	for(auto pass : in_written_passes)
 	{
 		ZE_CHECK(pass != in_pass);
 
 		pass_list.emplace_back(pass);
-		traverse_pass_dependencies(pass);
+		traverse_pass_dependencies(pass, stack_depth + 1);
 	}
 }
 
@@ -140,6 +151,20 @@ void RenderGraph::order_passes()
 
 		for(size_t i = 0; i < passes.size(); ++i)
 		{
+			bool candidate = true;
+
+			for(size_t j = 0; j < i; ++j)
+			{
+				if(depends_on_pass(passes[i], passes[j]))
+				{
+					candidate = false;
+					break;
+				}
+			}
+
+			if (!candidate)
+				continue;
+
 			pass_to_schedule = i;
 		}
 
@@ -275,6 +300,9 @@ void RenderGraph::execute(CommandListHandle in_list)
 		for(const auto attachment : pass->get_attachment_inputs())
 		{
 			const auto& resource = resources[attachment];
+			const auto& physical_resource = physical_resources[resource->get_physical_index()];
+			if (physical_resource.texture_usage_flags & TextureUsageFlagBits::DepthStencilAttachment)
+				continue;
 
 			if (resource->get_name() == "backbuffer")
 			{
@@ -322,15 +350,10 @@ void RenderGraph::execute(CommandListHandle in_list)
 			info.store_attachment_flags |= 1 << (color_attachments.size() - 1);
 		}
 
-		if(pass->get_depth_stencil_output() != Resource::null_resource_idx)
-		{
-			clear_values.emplace_back(ClearDepthStencilValue(1.f, 0));
-		}
-
 		RenderPassInfo::DepthStencilMode depth_stencil_mode = RenderPassInfo::DepthStencilMode::ReadOnly;
 		if (pass->get_depth_stencil_output() != Resource::null_resource_idx)
 		{
-			clear_values.emplace_back(ClearDepthStencilValue(1.f, 0));
+			clear_values.emplace_back(ClearDepthStencilValue(0.f, 0));
 			depth_stencil_mode = RenderPassInfo::DepthStencilMode::ReadWrite;
 		}
 
@@ -354,7 +377,11 @@ void RenderGraph::execute(CommandListHandle in_list)
 		if (pass->get_depth_stencil_output() != Resource::null_resource_idx)
 		{
 			const auto& resource = resources[pass->get_depth_stencil_output()];
+			const auto& physical_resource = physical_resources[resource->get_physical_index()];
+
 			info.depth_stencil_attachment = get_handles_from_physical_attachment(resource->get_physical_index()).second;
+			info.render_area.width = std::max<uint32_t>(info.render_area.width, physical_resource.texture_info.width);
+			info.render_area.height = std::max<uint32_t>(info.render_area.height, physical_resource.texture_info.height);
 		}
 
 		get_device()->cmd_begin_region(in_list, pass->get_name(), { 0.5f, 0.75f, 0.35f, 1 });

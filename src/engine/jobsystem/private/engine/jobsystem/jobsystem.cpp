@@ -1,9 +1,7 @@
 #include "engine/core.hpp"
 #include "engine/jobsystem/job.hpp"
 #include "engine/jobsystem/jobsystem.hpp"
-
 #include <random>
-
 #include "engine/jobsystem/worker_thread.hpp"
 
 namespace ze::jobsystem

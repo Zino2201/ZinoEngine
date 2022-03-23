@@ -338,7 +338,7 @@ void update_mouse_cursor()
 	}
 }
 
-void draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_render_graph)
+gfx::rendergraph::RenderPass& draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_render_graph)
 {
 	auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
 	auto update_viewport_buffers = [&](ImDrawData* draw_data, ViewportDrawData& vp_draw_data)
@@ -409,7 +409,7 @@ void draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_re
 
 	update_viewport_buffers(viewport->DrawData, renderer_data->draw_data);
 
-	in_render_graph.add_gfx_pass("ImGui",
+	return in_render_graph.add_gfx_pass("ImGui",
 		[&](rendergraph::RenderPass& render_pass)
 		{
 			render_pass.add_color_output("backbuffer",
@@ -491,8 +491,6 @@ void swap_buffers(ImGuiViewport* viewport)
 
 void draw_viewports(gfx::rendergraph::RenderGraph& in_render_graph)
 {
-	draw_viewport(ImGui::GetMainViewport(), in_render_graph);
-
 	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
 	for(int i = 1; i < platform_io.Viewports.Size; i++)
 	{

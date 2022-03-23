@@ -10,8 +10,6 @@ RenderPass::RenderPass(RenderGraph& in_graph,
 ResourceHandle RenderPass::add_attachment_input(const std::string& in_name)
 {
 	auto& resource = graph.get_attachment_resource(in_name);
-	ZE_CHECKF(!(resource.get_usage_flags() & TextureUsageFlagBits::DepthStencilAttachment), 
-		"Use set_depth_stencil_input for depth/stencil inputs");
 
 	resource.add_usage(TextureUsageFlagBits::Sampled);
 	resource.add_read(this);
@@ -20,6 +18,18 @@ ResourceHandle RenderPass::add_attachment_input(const std::string& in_name)
 	attachment_inputs.emplace_back(resource.get_index());
 
 	return resource.get_index();
+}
+
+ResourceHandle RenderPass::add_attachment_input(const ResourceHandle& in_handle)
+{
+	auto& resource = graph.get_attachment_resource(in_handle);
+
+	resource.add_usage(TextureUsageFlagBits::Sampled);
+	resource.add_read(this);
+	resource.add_queue(target_queue);
+
+	attachment_inputs.emplace_back(in_handle);
+	return in_handle;
 }
 
 void RenderPass::add_color_input(const std::string& in_name)
@@ -40,6 +50,9 @@ ResourceHandle RenderPass::add_color_output(const std::string& in_name, const At
 
 	if (in_force_load)
 		force_loads.emplace_back(resource.get_index());
+
+	if (in_attachment.sampled)
+		resource.add_usage(TextureUsageFlagBits::Sampled);
 
 	color_outputs.emplace_back(resource.get_index());
 
@@ -71,6 +84,11 @@ ResourceHandle RenderPass::set_depth_stencil_output(const std::string& in_name, 
 
 	depth_stencil_output = resource.get_index();
 	return resource.get_index();
+}
+
+void RenderPass::add_dependency(RenderPass* in_render_pass)
+{
+	dependencies.insert(in_render_pass);
 }
 
 bool RenderPass::is_color_input(const ResourceHandle in_handle) const

@@ -40,6 +40,7 @@
 /** Compile-time features */
 
 /** Return 1 if feature is enabled */
+#define ZE_FEATURE_PRIVATE_DEFINITION_PROFILING() ZE_DEFINED(ZE_HAS_PROFILING)
 #define ZE_FEATURE(X) ZE_FEATURE_PRIVATE_DEFINITION_##X()
 
 /** Dll symbol export/import */

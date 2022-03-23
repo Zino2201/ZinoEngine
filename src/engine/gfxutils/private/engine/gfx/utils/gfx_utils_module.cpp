@@ -45,6 +45,12 @@ void GfxUtilsModule::initialize_shaders(shadersystem::ShaderManager& in_shader_s
 	load_required_shaders(in_shader_system, "SPDMipmapsGen");
 }
 
+void GfxUtilsModule::destroy_resources()
+{
+	quad_vertex_buffer.reset();
+	quad_index_buffer.reset();
+}
+
 void GfxUtilsModule::load_required_shaders(shadersystem::ShaderManager& in_shader_system, const std::string& in_name)
 {
 	auto shader = in_shader_system.get_shader(in_name);

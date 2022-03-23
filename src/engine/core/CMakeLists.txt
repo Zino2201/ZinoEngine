@@ -5,6 +5,7 @@ find_package(Boost REQUIRED COMPONENTS locale)
 
 ze_add_module(core
 	public/core.natvis
+	public/engine/random.hpp
 	public/engine/core.hpp
 	public/engine/flags.hpp
 	public/engine/platform_macros.hpp
@@ -48,6 +49,13 @@ endif()
 
 if(ZE_WITH_SANITIZERS)
 	target_compile_definitions(core PUBLIC BOOST_USE_ASAN=1)
+endif()
+
+if(ZE_WITH_PROFILING)
+	find_package(Tracy REQUIRED)
+	find_package(Threads REQUIRED)
+	target_link_libraries(core PUBLIC Tracy::TracyClient)
+	target_compile_definitions(core PUBLIC ZE_HAS_PROFILING=1 TRACY_ENABLE)
 endif()
 
 target_compile_definitions(core PUBLIC "$<$<CONFIG:Debug>:ZE_BUILD_TYPE_DEBUG=1>$<$<CONFIG:RelWithDebInfo>:ZE_BUILD_TYPE_RELWITHDEBINFO=1>$<$<CONFIG:Release>:ZE_BUILD_TYPE_RELEASE=1>")

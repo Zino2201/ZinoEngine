@@ -3,7 +3,6 @@
 #include "engine/jobsystem/job.hpp"
 #include "engine/jobsystem/job_group.hpp"
 #include "engine/shadersystem/shader_manager.hpp"
-#include "tbb/concurrent_hash_map.h"
 
 namespace ze::shadersystem
 {
@@ -43,7 +42,8 @@ void ShaderPermutation::compile()
 		[&](jobsystem::Job&)
 	{
 		jobsystem::JobGroup group;
-		tbb::concurrent_hash_map<gfx::ShaderStageFlagBits, gfx::ShaderCompilerOutput> outputs;
+		std::mutex output_mutex;
+		robin_hood::unordered_map<gfx::ShaderStageFlagBits, gfx::ShaderCompilerOutput> outputs;
 
 		for (const auto& pass : shader.get_declaration().passes)
 		{
@@ -54,8 +54,9 @@ void ShaderPermutation::compile()
 					jobsystem::Job* stage_job = new_child_job(
 						[&, stage](jobsystem::Job&)
 						{
+							std::scoped_lock lock(output_mutex);
 							outputs.insert({ stage.stage, compile_stage(shader, id, stage, pass.common_hlsl) });
-						}, root_compilation_job, jobsystem::JobType::Normal, 0.f);
+						}, root_compilation_job, jobsystem::JobType::Normal);
 					group.add(stage_job);
 				}
 
@@ -156,7 +157,7 @@ void ShaderPermutation::compile()
 			}
 		}
 	},
-	jobsystem::JobType::Normal, 0.f);
+	jobsystem::JobType::Normal);
 
 	root_compilation_job->schedule();
 

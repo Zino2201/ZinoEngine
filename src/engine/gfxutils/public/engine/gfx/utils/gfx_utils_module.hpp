@@ -12,6 +12,7 @@ public:
 	GfxUtilsModule();
 
 	void initialize_shaders(shadersystem::ShaderManager& in_shader_system);
+	void destroy_resources();
 
 	static BufferHandle get_quad_vertex_buffer() { return quad_vertex_buffer.get(); }
 	static BufferHandle get_quad_index_buffer() { return quad_index_buffer.get(); }
