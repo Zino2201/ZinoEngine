@@ -19,7 +19,9 @@ WorkerThread::WorkerThread(size_t in_index)
 {
 	for(size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
 	{
-		consumer_tokens.emplace_back(job_queue);
+		high_consumer_tokens.emplace_back(high_job_queue);
+		normal_consumer_tokens.emplace_back(normal_job_queue);
+		low_consumer_tokens.emplace_back(low_job_queue);
 	}
 }
 
@@ -60,13 +62,24 @@ bool WorkerThread::flush_one()
 
 void WorkerThread::enqueue(const Job* job)
 {
-	job_queue.enqueue(job);
+	switch(job->get_priority())
+	{
+	case JobPriority::High:
+		high_job_queue.enqueue(job);
+		break;
+	case JobPriority::Normal:
+		normal_job_queue.enqueue(job);
+		break;
+	case JobPriority::Low:
+		low_job_queue.enqueue(job);
+		break;
+	}
 }
 
 const Job* WorkerThread::try_get_or_steal_job()
 {
 	const Job* job = nullptr;
-	if(!job_queue.try_dequeue(consumer_tokens[index], job))
+	if(!try_dequeue(job))
 	{
 		const size_t worker_idx = random_SM64<size_t>(0, get_worker_count() - 1);
 		auto& worker_to_steal = get_worker_by_idx(worker_idx);
@@ -74,7 +87,7 @@ const Job* WorkerThread::try_get_or_steal_job()
 		if (this != &worker_to_steal)
 		{
 			const Job* stolen_job = nullptr;
-			if(worker_to_steal.job_queue.try_dequeue(worker_to_steal.get_consumer_tokens()[index], stolen_job))
+			if(worker_to_steal.try_dequeue(stolen_job))
 				return stolen_job;
 		}
 
@@ -83,6 +96,20 @@ const Job* WorkerThread::try_get_or_steal_job()
 	}
 
 	return job;
+}
+
+bool WorkerThread::try_dequeue(const Job*& job)
+{
+	if (high_job_queue.try_dequeue(high_consumer_tokens[index], job))
+		return true;
+
+	if (normal_job_queue.try_dequeue(normal_consumer_tokens[index], job))
+		return true;
+
+	if (low_job_queue.try_dequeue(low_consumer_tokens[index], job))
+		return true;
+
+	return false;
 }
 
 }

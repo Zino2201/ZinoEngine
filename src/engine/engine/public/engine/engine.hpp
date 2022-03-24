@@ -29,6 +29,7 @@ private:
 	void on_cursor_set() override;
 	void on_key_down(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat) override;
 	void on_key_up(const platform::KeyCode in_key_code, const uint32_t in_character_code, const bool in_repeat) override;
+	void on_key_char(const char in_char) override;
 	void on_mouse_move(const glm::ivec2& in_delta) override;
 private:
 	bool running;

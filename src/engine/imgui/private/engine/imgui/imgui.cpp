@@ -193,7 +193,7 @@ void initialize(shadersystem::ShaderManager& in_shader_manager)
 			renderer_data->image_available_semaphore.get()) == GfxResult::Success)
 		{
 			rendergraph::RenderGraph render_graph(renderer_data->registry);
-			draw_viewport(viewport, render_graph);
+			draw_viewport(viewport, render_graph, false);
 
 			render_graph.set_backbuffer_attachment("backbuffer",
 				get_device()->get_swapchain_backbuffer_view(renderer_data->window.get_swapchain()),
@@ -338,7 +338,7 @@ void update_mouse_cursor()
 	}
 }
 
-gfx::rendergraph::RenderPass& draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_render_graph)
+gfx::rendergraph::RenderPass& draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_render_graph, bool in_load)
 {
 	auto* renderer_data = static_cast<ViewportRendererData*>(viewport->RendererUserData);
 	auto update_viewport_buffers = [&](ImDrawData* draw_data, ViewportDrawData& vp_draw_data)
@@ -414,7 +414,7 @@ gfx::rendergraph::RenderPass& draw_viewport(ImGuiViewport* viewport, gfx::render
 		{
 			render_pass.add_color_output("backbuffer",
 				{},
-				viewport == ImGui::GetMainViewport());
+				in_load);
 		},
 		[viewport, renderer_data](CommandListHandle list)
 		{

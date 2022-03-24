@@ -81,7 +81,7 @@ void initialize(shadersystem::ShaderManager& in_shader_manager);
 void initialize_main_viewport(platform::Window& in_window, gfx::SwapchainHandle in_swapchain);
 void update_main_viewport(platform::Window& in_window, gfx::SwapchainHandle in_swapchain);
 void new_frame(float in_delta_time, platform::Window& in_main_window);
-gfx::rendergraph::RenderPass& draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_render_graph);
+gfx::rendergraph::RenderPass& draw_viewport(ImGuiViewport* viewport, gfx::rendergraph::RenderGraph& in_render_graph, bool in_load);
 void swap_buffers(ImGuiViewport* viewport);
 void draw_viewports(gfx::rendergraph::RenderGraph& in_render_graph);
 void update_mouse_cursor();

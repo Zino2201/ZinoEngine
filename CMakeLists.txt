@@ -5,10 +5,12 @@ option(ZE_WITH_VULKAN "Build with Vulkan support (requires Vulkan SDK)" ON)
 option(ZE_MONOLITHIC "Monolithic mode (statc libs)" OFF)
 option(ZE_WITH_TESTS "With Tests" ON)
 option(ZE_WITH_SANITIZERS "With Sanitizers (requires ASan support from compiler)" OFF)
+option(ZE_WITH_PROFILING "With Profiling" ON)
 
 message(STATUS "With Vulkan: ${ZE_WITH_VULKAN}")
 message(STATUS "With Tests: ${ZE_WITH_TESTS}")
 message(STATUS "With Sanitizers: ${ZE_WITH_SANITIZERS}")
+message(STATUS "With Profiling: ${ZE_WITH_PROFILING}")
 message(STATUS "Is Monolithic: ${ZE_MONOLITHIC}")
 
 if(ZE_WITH_SANITIZERS)
