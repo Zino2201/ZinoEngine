@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/debug/assertions.hpp"
 #include <boost/dynamic_bitset.hpp>
 
 namespace ze
@@ -10,16 +11,17 @@ class SparseArray
 {
 public:
 	template<typename U>
-	class SparseArrayIterator
+	class Iterator
 	{
 	public:
+		using ArrayType = std::conditional_t<std::is_const_v<U>, const SparseArray<T>&, SparseArray<T>&>;
 		using iterator_category = std::random_access_iterator_tag;
 		using value_type = U;
 		using difference_type = std::ptrdiff_t;
 		using pointer = U*;
 		using reference = U&;
 
-		SparseArrayIterator(SparseArray<T>& in_array,
+		Iterator(ArrayType in_array,
 			const size_t& in_current_idx) :
 			current_idx(in_current_idx),
 			array(in_array) {}
@@ -29,7 +31,12 @@ public:
 			return array[current_idx];
 		}
 
-		SparseArrayIterator& operator++()
+		const U& operator*() const
+		{
+			return array[current_idx];
+		}
+
+		Iterator& operator++()
 		{
 			while (current_idx != array.get_capacity())
 			{
@@ -40,47 +47,47 @@ public:
 			return *this;
 		}
 
-		SparseArrayIterator& operator=(const SparseArrayIterator& other)
+		Iterator& operator=(const Iterator& other)
 		{
 			array = other.array;
 			current_idx = other.current_idx;
 			return *this;
 		}
 
-		SparseArrayIterator& operator-(difference_type in_diff)
+		Iterator& operator-(difference_type in_diff)
 		{
 			current_idx -= in_diff;
 			ZE_CHECK(current_idx > 0 && current_idx <= array.get_capacity() - 1);
 			return *this;
 		}
 
-		friend difference_type operator-(const SparseArrayIterator& left, const SparseArrayIterator& right)
+		friend difference_type operator-(const Iterator& left, const Iterator& right)
 		{
 			return right - left;
 		}
 
-		friend bool operator==(const SparseArrayIterator& left, const SparseArrayIterator& right)
+		friend bool operator==(const Iterator& left, const Iterator& right)
 		{
 			return left.current_idx == right.current_idx;
 		}
 
-		friend bool operator!=(const SparseArrayIterator& left, const SparseArrayIterator& right)
+		friend bool operator!=(const Iterator& left, const Iterator& right)
 		{
 			return left.current_idx != right.current_idx;
 		}
 	private:
 		size_t current_idx;
-		SparseArray<T>& array;
+		ArrayType array;
 	};
 
 	using ElementType = T;
-	using Iterator = SparseArrayIterator<T>;
-	using ConstIterator = const SparseArrayIterator<const T>;
+	using IteratorType = Iterator<T>;
+	using ConstIteratorType = const Iterator<const T>;
 
 	SparseArray() : elements(nullptr), size(0), capacity(0) {}
 	~SparseArray()
 	{
-		if (0)//elements)
+		if (elements)
 		{
 			for (size_t i = 0; i < capacity; ++i)
 			{
@@ -112,24 +119,34 @@ public:
 		size--;
 	}
 
-	Iterator begin()
+	IteratorType begin()
 	{
-		return Iterator(*this, 0);
+		return IteratorType(*this, 0);
 	}
 
-	ConstIterator cbegin() const
+	ConstIteratorType begin() const
 	{
-		return ConstIterator(*this, 0);
+		return cbegin();
 	}
 
-	Iterator end()
+	ConstIteratorType cbegin() const
 	{
-		return Iterator(*this, size - 1);
+		return ConstIteratorType(*this, 0);
 	}
 
-	ConstIterator cend() const
+	IteratorType end()
 	{
-		return ConstIterator(*this, size - 1);
+		return IteratorType(*this, size - 1);
+	}
+
+	ConstIteratorType end() const
+	{
+		return cend();
+	}
+
+	ConstIteratorType cend() const
+	{
+		return ConstIteratorType(*this, size - 1);
 	}
 
 	ElementType& operator[](const size_t& in_index)
