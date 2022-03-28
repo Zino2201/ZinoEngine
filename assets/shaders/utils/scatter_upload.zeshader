@@ -3,7 +3,9 @@ shader "ScatterUpload"
     parameters
     {
         uint offset;
+        uint element_size;
         uint data_size;
+        uint data_offset_in_element;
         uint element_count;
         uint threads_per_element;
         ByteAddressBuffer upload_buffer;
@@ -17,7 +19,9 @@ shader "ScatterUpload"
         struct GlobalData
         {
             uint offset;
+            uint element_size;
             uint data_size;
+            uint data_offset_in_element;
             uint element_count;
             uint threads_per_element;
             uint upload_buffer;
@@ -33,15 +37,14 @@ shader "ScatterUpload"
             RWByteAddressBuffer dst_buffer = get_resource<RWByteAddressBuffer>(global_data.dst_buffer);
             thread_id = thread_id + global_data.offset;
 
-            const uint element_size = global_data.data_size + sizeof(uint);
             uint element_index = thread_id / global_data.threads_per_element;
 
             if(element_index < global_data.element_count)
             {
-                uint element_thread_offset = thread_id * global_data.threads_per_element % global_data.data_size;
+                uint element_thread_offset = thread_id - (element_index * global_data.threads_per_element);
 
-                uint dst_index = upload_buffer.Load(element_index * element_size) * global_data.data_size + element_thread_offset;
-                uint src_data = upload_buffer.Load(element_index * element_size + sizeof(uint) + element_thread_offset);
+                uint dst_index = upload_buffer.Load(element_index * global_data.element_size) * global_data.data_size + element_thread_offset;
+                uint src_data = upload_buffer.Load(element_index * global_data.element_size + global_data.data_offset_in_element + element_thread_offset);
                 dst_buffer.Store(dst_index, src_data);
             }
         }

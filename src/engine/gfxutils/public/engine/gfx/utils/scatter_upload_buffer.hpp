@@ -15,7 +15,7 @@ class ScatterUploadBuffer
 {
 	struct ScatterElement
 	{
-		uint32_t index;
+		alignas(8) uint32_t index;
 		T data;
 
 		ScatterElement(uint32_t in_index) : index(in_index) {}
@@ -31,8 +31,7 @@ public:
 		upload_buffer_size(static_cast<uint32_t>(in_max_elements * sizeof(ScatterElement))), element_count(0)
 	{
 		upload_buffer = UniqueBuffer(get_device()->create_buffer(
-			BufferInfo::make_ssbo_cpu_visible(std::max(64ull, upload_buffer_size))).get_value());
-
+			BufferInfo::make_ssbo_cpu_visible(upload_buffer_size)).get_value());
 		mapped_data = get_device()->map_buffer(upload_buffer.get()).get_value();
 	}
 
@@ -53,17 +52,20 @@ public:
 	{
 		if (element_count != 0)
 		{
-			static constexpr size_t bytes_per_thread = 4;
-			const size_t threads_per_element = sizeof(T) / bytes_per_thread;
+			static constexpr size_t uint_per_thread = 1;
+			static constexpr size_t max_threads_per_work_group = 64;
+			const size_t threads_per_element = sizeof(T) / uint_per_thread;
 			const size_t thread_count = element_count * threads_per_element;
-			const size_t dispatch_count = static_cast<size_t>(std::ceil(static_cast<float>(thread_count) / 64.f));
+			const size_t dispatch_count = static_cast<size_t>(std::ceil(static_cast<float>(thread_count) / max_threads_per_work_group));
 
 			for (size_t i = 0; i < dispatch_count; ++i)
 			{
 				if (const auto instance = shader_manager.get_shader("ScatterUpload")->instantiate({}))
 				{
-					instance->set_parameter("offset", static_cast<uint32_t>(i * 64));
+					instance->set_parameter("offset", static_cast<uint32_t>(i * max_threads_per_work_group));
 					instance->set_parameter("element_count", element_count);
+					instance->set_parameter("element_size", static_cast<uint32_t>(sizeof(ScatterElement)));
+					instance->set_parameter("data_offset_in_element", static_cast<uint32_t>(offsetof(ScatterElement, data)));
 					instance->set_parameter("data_size", static_cast<uint32_t>(sizeof(T)));
 					instance->set_parameter("threads_per_element", static_cast<uint32_t>(threads_per_element));
 					instance->set_parameter("upload_buffer", upload_buffer.get());
