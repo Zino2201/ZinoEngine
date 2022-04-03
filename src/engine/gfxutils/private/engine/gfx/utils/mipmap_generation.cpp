@@ -1,8 +1,11 @@
 #include "engine/gfx/utils/mipmap_generation.hpp"
+ZE_WARNING_PUSH
+ZE_WARNING_DISABLE_IGNORED_QUALIFIERS
 #define A_STATIC
 #define A_CPU
 #include "ffx-spd/ffx_a.h"
 #include "ffx-spd/ffx_spd.h"
+ZE_WARNING_POP
 #include "engine/shadersystem/shader_manager.hpp"
 
 namespace ze::gfx
@@ -30,7 +33,7 @@ void generate_mipmaps(shadersystem::ShaderManager& in_shader_manager,
 				.set_debug_name("Mipmap Gen Global Atomic Counter")).get_value());
 
 		std::vector<UniqueTextureView> mips;
-		for (size_t i = 0; i < work_group_and_mip_count[1]; ++i)
+		for (uint32_t i = 0; i < work_group_and_mip_count[1]; ++i)
 		{
 			mips.emplace_back(UniqueTextureView(get_device()->create_texture_view(
 				TextureViewInfo::make_2d(in_texture, in_format, TextureSubresourceRange(

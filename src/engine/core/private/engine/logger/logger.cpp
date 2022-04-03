@@ -19,7 +19,8 @@ std::mutex log_mutex;
 
 namespace detail
 {
-std::string severity_to_string(SeverityFlagBits in_severity)
+
+std::string_view severity_to_string(SeverityFlagBits in_severity)
 {
 	switch(in_severity)
 	{

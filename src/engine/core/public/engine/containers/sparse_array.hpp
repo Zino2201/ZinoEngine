@@ -38,9 +38,9 @@ public:
 
 		Iterator& operator++()
 		{
-			while (current_idx != array.get_capacity())
+			while (++current_idx < array.get_capacity())
 			{
-				if (array.allocated_indices[++current_idx])
+				if (array.allocated_indices[current_idx])
 					return *this;
 			}
 
@@ -136,7 +136,7 @@ public:
 
 	IteratorType end()
 	{
-		return IteratorType(*this, size - 1);
+		return IteratorType(*this, size);
 	}
 
 	ConstIteratorType end() const
@@ -146,7 +146,7 @@ public:
 
 	ConstIteratorType cend() const
 	{
-		return ConstIteratorType(*this, size - 1);
+		return ConstIteratorType(*this, size);
 	}
 
 	ElementType& operator[](const size_t& in_index)

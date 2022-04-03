@@ -489,7 +489,7 @@ void swap_buffers(ImGuiViewport* viewport)
 	}
 }
 
-void draw_viewports(gfx::rendergraph::RenderGraph& in_render_graph)
+void draw_viewports()
 {
 	ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
 	for(int i = 1; i < platform_io.Viewports.Size; i++)

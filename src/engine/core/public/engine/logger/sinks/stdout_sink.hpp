@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/logger/Sink.hpp"
+#include "engine/logger/sink.hpp"
 
 namespace ze::logger
 {

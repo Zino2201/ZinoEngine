@@ -10,7 +10,10 @@ VulkanBuffer::VulkanBuffer(VulkanDevice& in_device,
 	const VmaAllocationInfo& in_alloc_info,
 	VulkanDescriptorManager::DescriptorIndexHandle in_srv_index,
 	VulkanDescriptorManager::DescriptorIndexHandle in_uav_index) : device(in_device), buffer(in_buffer), allocation(in_allocation),
-	alloc_info(in_alloc_info), srv_index(in_srv_index), uav_index(in_uav_index) {}
+	alloc_info(in_alloc_info), srv_index(in_srv_index), uav_index(in_uav_index)
+{
+    UnusedParameters { alloc_info };
+}
 	
 VulkanBuffer::~VulkanBuffer()
 {

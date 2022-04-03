@@ -4,7 +4,7 @@
 namespace ze
 {
 
-Material::Material(shadersystem::Shader* in_shader) : shader(in_shader) {}
-
+Material::Material(shadersystem::Shader* in_shader, shadersystem::ShaderPermutationId in_permutation_id)
+	: shader(in_shader), shader_permutation_id(in_permutation_id) {}
 
 }

@@ -146,6 +146,9 @@ void VulkanDevice::set_resource_name(const std::string_view& in_name,
 	case DeviceResourceType::Shader:
 		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanShader>(in_handle)->shader_module);
 		break;
+	case DeviceResourceType::CommandPool:
+		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanCommandPool>(in_handle)->get_command_pool());
+		break;
 	case DeviceResourceType::CommandList:
 		info.objectHandle = reinterpret_cast<uint64_t>(get_resource<VulkanCommandList>(in_handle)->get_command_buffer());
 		break;

@@ -40,20 +40,20 @@ public:
 	}
 	
 	/** Default move ctor */
-	Result(Result<T, E>&&)
-		requires !std::is_same_v<T, detail::MakeResultValue> && !std::is_same_v<E, detail::MakeResultError> = default;
+	Result(Result<T, E>&&) noexcept
+		requires (!std::is_same_v<T, detail::MakeResultValue> && !std::is_same_v<E, detail::MakeResultError>) = default;
 
 	/** Special construct for make_result to make code less cluttered */
 	Result(Result<ValueType, detail::MakeResultError>&& in_other) noexcept
-		requires !std::is_same_v<T, detail::MakeResultValue> : value(std::move(in_other.get_value())), error_handled(false) {}
-	
-	Result(Result<detail::MakeResultValue, E>&& in_other) noexcept
-		requires !std::is_same_v<E, detail::MakeResultError> : value(std::move(in_other.get_error())), error_handled(false) {}
+		requires (!std::is_same_v<T, detail::MakeResultValue>) : value(std::move(in_other.get_value())), error_handled(false) {}
+
+    Result(Result<detail::MakeResultValue, E>&& in_other) noexcept
+		requires (!std::is_same_v<E, detail::MakeResultError>) : value(std::move(in_other.get_error())), error_handled(false) {}
 
 	/** unique_ptr support */
 	template<typename U>
-	Result(Result<std::unique_ptr<U>, detail::MakeResultError>&& in_other) noexcept
-		requires !std::is_same_v<T, detail::MakeResultValue> : value(std::move(in_other.get_value())), error_handled(false) {}
+    Result(Result<std::unique_ptr<U>, detail::MakeResultError>&& in_other) noexcept
+		requires (!std::is_same_v<T, detail::MakeResultValue>) : value(std::move(in_other.get_value())), error_handled(false) {}
 	
 	Result& operator=(const Result&) = default;
 	Result& operator=(Result&&) noexcept = default;

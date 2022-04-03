@@ -120,7 +120,7 @@ Device::Device(Backend& in_backend,
 {
 	current_device = this;
 
-	if (max_frames_in_flight == 1)
+	if constexpr (max_frames_in_flight < 2)
 		logger::warn(log_gfx_device, "Using only one in-flight frame, except suboptimal performances.");
 
 	for(size_t i = 0; i < max_frames_in_flight; ++i)
@@ -412,7 +412,7 @@ Result<TextureHandle, GfxResult> Device::create_texture(TextureInfo in_create_in
 			{
 				BufferTextureCopyRegion(0,
 					TextureSubresourceLayers(format_to_aspect_flags(texture->get_create_info().format),
-					i,
+					static_cast<uint32_t>(i),
 					0,
 					in_create_info.info.array_layers),
 					Offset3D(),

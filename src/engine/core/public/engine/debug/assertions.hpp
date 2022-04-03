@@ -37,5 +37,5 @@
 #else
 #define ZE_CHECK(condition)
 #define ZE_CHECKF(condition, msg, ...) 
-#define ZE_UNREACHABLE() std::abort();
+#define ZE_UNREACHABLE() std::abort(); ZE_BUILTIN_UNREACHABLE()
 #endif

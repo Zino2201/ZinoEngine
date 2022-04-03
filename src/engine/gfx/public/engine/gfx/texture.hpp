@@ -162,8 +162,8 @@ struct TextureViewCreateInfo
 	Format format;
 	TextureSubresourceRange subresource_range;
 
-	TextureViewCreateInfo() : type(TextureViewType::Tex1D),
-		format(Format::Undefined), texture(null_backend_resource) {}
+	TextureViewCreateInfo() : texture(null_backend_resource), type(TextureViewType::Tex1D),
+		format(Format::Undefined) {}
 
 	TextureViewCreateInfo(const BackendDeviceResource& in_texture,
 		TextureViewType in_type, Format in_format, const TextureSubresourceRange& in_subresource_range) :
@@ -175,14 +175,15 @@ inline TextureAspectFlags format_to_aspect_flags(Format in_format)
 	switch(in_format)
 	{
 	case Format::Undefined:
-		return TextureAspectFlags();
+		return {};
 	case Format::D24UnormS8Uint:
 	case Format::D32SfloatS8Uint:
 		return TextureAspectFlags(TextureAspectFlagBits::Depth | TextureAspectFlagBits::Stencil);
-	case Format::D32Sfloat:
-		return TextureAspectFlags(TextureAspectFlagBits::Depth);
+    case Format::D16Unorm:
+    case Format::D32Sfloat:
+		return TextureAspectFlagBits::Depth;
 	default:
-		return TextureAspectFlags(TextureAspectFlagBits::Color);
+		return TextureAspectFlagBits::Color;
 	}
 }
 	

@@ -81,7 +81,7 @@ const Job* WorkerThread::try_get_or_steal_job()
 	const Job* job = nullptr;
 	if(!try_dequeue(job))
 	{
-		const size_t worker_idx = random_SM64<size_t>(0, get_worker_count() - 1);
+		const auto worker_idx = random_SM64<size_t>(0, get_worker_count() - 1);
 		auto& worker_to_steal = get_worker_by_idx(worker_idx);
 
 		if (this != &worker_to_steal)

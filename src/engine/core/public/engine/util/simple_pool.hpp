@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core.hpp"
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -74,7 +75,7 @@ public:
 		// TODO: implement lol
 	}
 
-	[[nodiscard]] const size_t get_size() const { return size; }
+    size_t get_size() const { return size; }
 private:
 	std::vector<ChunkType> chunks;
 	std::vector<T*> free_memory;
@@ -82,7 +83,7 @@ private:
 	size_t size;
 
 	struct NoMutex {};
-	[[no_unique_address]] std::conditional_t<ThreadSafe, std::mutex, NoMutex> mutex;
+    ZE_NO_UNIQUE_ADDRESS std::conditional_t<ThreadSafe, std::mutex, NoMutex> mutex;
 };
 
 template<typename T, int ChunkSize = 64>

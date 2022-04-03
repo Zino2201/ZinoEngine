@@ -48,7 +48,7 @@ void set_pattern(const std::string& in_pattern);
 namespace detail
 {
 
-std::string severity_to_string(SeverityFlagBits in_severity);
+std::string_view severity_to_string(SeverityFlagBits in_severity);
 std::string format_message(const std::string& in_pattern, const Message& in_message);
 
 }

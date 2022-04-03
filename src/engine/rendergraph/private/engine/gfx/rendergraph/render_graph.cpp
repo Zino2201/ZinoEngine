@@ -240,24 +240,24 @@ void RenderGraph::build_barriers()
 			if (resource.get_usage_flags() & TextureUsageFlagBits::DepthStencilAttachment)
 				continue;
 
-			barriers.flushs.emplace_back(input,
+			barriers.flushs.push_back(Barrier { input,
 				TextureLayout::ColorAttachment,
 				AccessFlagBits::ColorAttachmentWrite,
 				PipelineStageFlagBits::ColorAttachmentOutput,
 				TextureLayout::ColorAttachment,
 				AccessFlagBits::InputAttachmentRead,
-				PipelineStageFlagBits::FragmentShader);
+				PipelineStageFlagBits::FragmentShader });
 		}
 
 		for (auto output : pass->get_color_outputs())
 		{
-			barriers.flushs.emplace_back(output,
+			barriers.flushs.push_back(Barrier { output,
 				TextureLayout::Undefined,
 				AccessFlags(),
 				PipelineStageFlagBits::FragmentShader,
 				TextureLayout::ColorAttachment,
 				AccessFlagBits::ColorAttachmentWrite,
-				PipelineStageFlagBits::ColorAttachmentOutput);
+				PipelineStageFlagBits::ColorAttachmentOutput });
 		}
 
 		render_pass_barriers.emplace_back(std::move(barriers));
@@ -314,7 +314,7 @@ void RenderGraph::execute(CommandListHandle in_list)
 			}
 
 			clear_values.emplace_back(ClearColorValue({ 0, 0, 0, 1 }));
-			input_attachments_refs.emplace_back(color_attachments.size() - 1);
+			input_attachments_refs.emplace_back(static_cast<uint32_t>(color_attachments.size() - 1));
 		}
 
 		for(const auto attachment : pass->get_color_outputs())
@@ -333,7 +333,7 @@ void RenderGraph::execute(CommandListHandle in_list)
 				color_attachments.emplace_back(get_handles_from_physical_attachment(resource->get_physical_index()).second);
 			}
 
-			color_attachments_refs.emplace_back(color_attachments.size() - 1);
+			color_attachments_refs.emplace_back(static_cast<uint32_t>(color_attachments.size() - 1));
 			info.render_area.width = std::max<uint32_t>(info.render_area.width, width);
 			info.render_area.height = std::max<uint32_t>(info.render_area.height, height);
 

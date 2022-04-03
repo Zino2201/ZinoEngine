@@ -37,7 +37,7 @@ struct ShaderFormat
 namespace std
 {
 
-inline std::string to_string(const ze::gfx::ShaderModel& in_shader_model)
+inline std::string_view to_string(const ze::gfx::ShaderModel in_shader_model)
 {
 	switch(in_shader_model)
 	{
@@ -50,7 +50,7 @@ inline std::string to_string(const ze::gfx::ShaderModel& in_shader_model)
 	return "";
 }
 
-inline std::string to_string(const ze::gfx::ShaderLanguage& in_language)
+inline std::string_view to_string(const ze::gfx::ShaderLanguage in_language)
 {
 	switch(in_language)
 	{

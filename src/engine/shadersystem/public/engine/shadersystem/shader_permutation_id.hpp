@@ -5,15 +5,17 @@ namespace ze::shadersystem
 
 static constexpr size_t permutation_bit_count = 32;
 
-struct ShaderPermutationId
+using ShaderPermutationId = std::bitset<permutation_bit_count>;
+
+struct ShaderPermutationPassIdPair
 {
 	std::string_view pass;
-	std::bitset<permutation_bit_count> options;
+	ShaderPermutationId id;
 
-	bool operator==(const ShaderPermutationId& in_id) const
+	bool operator==(const ShaderPermutationPassIdPair& in_id) const
 	{
 		return pass == in_id.pass && 
-			options == in_id.options;
+			id == in_id.id;
 	}
 };
 
@@ -22,12 +24,13 @@ struct ShaderPermutationId
 namespace std
 {
 
-template<> struct hash<ze::shadersystem::ShaderPermutationId>
+template<> struct hash<ze::shadersystem::ShaderPermutationPassIdPair>
 {
-	uint64_t operator()(const ze::shadersystem::ShaderPermutationId& in_id) const noexcept
+	uint64_t operator()(const ze::shadersystem::ShaderPermutationPassIdPair& in_id) const noexcept
 	{
 		uint64_t hash = std::hash<std::string_view>()(in_id.pass);
-		ze::hash_combine(hash, in_id.options);
+		ze::hash_combine(hash, in_id.pass);
+		ze::hash_combine(hash, in_id.id);
 		return hash;
 	}
 };

@@ -7,23 +7,24 @@
 namespace ze::shadersystem
 {
 
-ShaderPermutation::ShaderPermutation(Shader& in_shader, ShaderPermutationId in_id)
-	: shader(in_shader), id(in_id), state(ShaderPermutationState::Unavailable), parameters_size(0)
+ShaderPermutation::ShaderPermutation(Shader& in_shader, ShaderPermutationPassIdPair in_id)
+	: shader(in_shader), pass_id_pair(in_id), state(ShaderPermutationState::Unavailable), parameters_size(0)
 {
 
 }
 
-
-
 void ShaderPermutation::compile()
 {
-	auto compile_stage = [](const Shader& shader, const ShaderPermutationId& id, const ShaderStage& in_stage, const std::string& in_common_hlsl)
+	if (state == ShaderPermutationState::Compiling)
+		return;
+
+	auto compile_stage = [](const Shader& shader, const ShaderPermutationPassIdPair& perm, const ShaderStage& in_stage, const std::string& in_common_hlsl)
 	{
 		gfx::ShaderCompilerInput input;
 		input.name = fmt::format("{} (pass {}, options {}, stage {})",
 			shader.get_declaration().name,
-			id.pass,
-			id.options.to_ullong(),
+			perm.pass,
+			perm.id.to_ullong(),
 			std::to_string(in_stage.stage));
 		input.stage = in_stage.stage;
 		input.target_format = shader.get_shader_manager().get_shader_format();
@@ -47,15 +48,15 @@ void ShaderPermutation::compile()
 
 		for (const auto& pass : shader.get_declaration().passes)
 		{
-			if (pass.name == id.pass)
+			if (pass.name == pass_id_pair.pass)
 			{
-				for (const auto stage : pass.stages)
+				for (const auto& stage : pass.stages)
 				{
 					jobsystem::Job* stage_job = new_child_job(
 						[&, stage](jobsystem::Job&)
 						{
 							std::scoped_lock lock(output_mutex);
-							outputs.insert({ stage.stage, compile_stage(shader, id, stage, pass.common_hlsl) });
+							outputs.insert({ stage.stage, compile_stage(shader, pass_id_pair, stage, pass.common_hlsl) });
 						}, root_compilation_job, jobsystem::JobType::Normal);
 					group.add(stage_job);
 				}
@@ -125,15 +126,15 @@ void ShaderPermutation::compile()
 			std::vector bindings =
 			{
 				gfx::DescriptorSetLayoutBinding(gfx::srv_storage_buffer_binding, 
-					gfx::DescriptorType::StorageBuffer, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+					gfx::DescriptorType::StorageBuffer, gfx::max_descriptors_per_binding, gfx::all_shader_stages),
 				gfx::DescriptorSetLayoutBinding(gfx::uav_storage_buffer_binding, 
-					gfx::DescriptorType::StorageBuffer, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+					gfx::DescriptorType::StorageBuffer, gfx::max_descriptors_per_binding, gfx::all_shader_stages),
 				gfx::DescriptorSetLayoutBinding(gfx::srv_texture_2D_binding, 
-					gfx::DescriptorType::SampledTexture, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+					gfx::DescriptorType::SampledTexture, gfx::max_descriptors_per_binding, gfx::all_shader_stages),
 				gfx::DescriptorSetLayoutBinding(gfx::srv_texture_cube_binding, 
-					gfx::DescriptorType::SampledTexture, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+					gfx::DescriptorType::SampledTexture, gfx::max_descriptors_per_binding, gfx::all_shader_stages),
 				gfx::DescriptorSetLayoutBinding(gfx::srv_sampler_binding, 
-					gfx::DescriptorType::Sampler, gfx::max_descriptors_per_binding, gfx::ShaderStageFlagBits::All),
+					gfx::DescriptorType::Sampler, gfx::max_descriptors_per_binding, gfx::all_shader_stages),
 			};
 			
 			std::array set_layouts = { gfx::DescriptorSetLayoutCreateInfo(bindings) };
@@ -152,7 +153,7 @@ void ShaderPermutation::compile()
 			{
 				logger::fatal(log_shadersystem, "Failed to create pipeline layout for shader {} (permutation: {}): {}",
 					shader.get_declaration().name,
-					id.options.to_ullong(),
+					pass_id_pair.id.to_ullong(),
 					std::to_string(result.get_error()));
 			}
 		}

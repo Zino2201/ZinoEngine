@@ -18,7 +18,7 @@ CLSID_SCOPE const GUID CLSID_ZEIncludeHandler =
 };
 
 CROSS_PLATFORM_UUIDOF(ZEIncludeHandler, "21AE0D66-7128-4C24-AC91-0CC0C7F38DBA");
-struct ZEIncludeHandler : public IDxcIncludeHandler
+struct ZEIncludeHandler final : public IDxcIncludeHandler
 {
 public:
 	ZEIncludeHandler(IDxcUtils* in_utils) : utils(in_utils) {}
@@ -265,7 +265,7 @@ public:
 					spv_compiler.get_decoration(ubo.id, spv::DecorationBinding),
 					1,
 					spv_compiler.get_declared_struct_size(type),
-					members});
+					members });
 			}
 
 			for(const auto& ssbo : resources.storage_buffers)
@@ -274,7 +274,9 @@ public:
 					ShaderReflectionResourceType::StorageBuffer,
 					spv_compiler.get_decoration(ssbo.id, spv::DecorationDescriptorSet),
 					spv_compiler.get_decoration(ssbo.id, spv::DecorationBinding),
-					1 });
+					1,
+                    1,
+                    {} });
 			}
 
 			for (const auto& tex : resources.separate_images)
@@ -296,7 +298,9 @@ public:
 					type,
 					spv_compiler.get_decoration(tex.id, spv::DecorationDescriptorSet),
 					spv_compiler.get_decoration(tex.id, spv::DecorationBinding),
-					1 });
+					1,
+                    1,
+                    {} });
 			}
 
 			for (const auto& sampler : resources.separate_samplers)
@@ -305,7 +309,9 @@ public:
 					ShaderReflectionResourceType::Sampler,
 					spv_compiler.get_decoration(sampler.id, spv::DecorationDescriptorSet),
 					spv_compiler.get_decoration(sampler.id, spv::DecorationBinding),
-					1 });
+					1,
+                    1,
+                    {} });
 			}
 
 			for(const auto& push_constant : resources.push_constant_buffers)
@@ -321,8 +327,8 @@ public:
 						spv_compiler.type_struct_member_offset(type, i) });
 				}
 
-				output.reflection_data.push_constants.emplace_back(spv_compiler.get_declared_struct_size(type), 
-					members);
+				output.reflection_data.push_constants.push_back(ShaderReflectionPushConstant { spv_compiler.get_declared_struct_size(type),
+					members });
 			}
 		}
 		else

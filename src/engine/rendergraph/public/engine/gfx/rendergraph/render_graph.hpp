@@ -98,6 +98,7 @@ public:
 	RenderPass(RenderGraph& in_graph,
 		std::string in_name,
 		RenderPassQueueFlagBits in_target_queue);
+    virtual ~RenderPass() = default;
 
 	virtual void execute(CommandListHandle in_list) = 0;
 
@@ -118,8 +119,8 @@ public:
 	const auto& get_color_inputs() const { return color_inputs; }
 	const auto& get_color_outputs() const { return color_outputs; }
 	const auto& get_name() const { return name; }
-	const auto get_depth_stencil_input() const { return depth_stencil_input; }
-	const auto get_depth_stencil_output() const { return depth_stencil_output; }
+	auto get_depth_stencil_input() const { return depth_stencil_input; }
+	auto get_depth_stencil_output() const { return depth_stencil_output; }
 	const auto& get_dependencies() const { return dependencies; }
 private:
 	RenderGraph& graph;

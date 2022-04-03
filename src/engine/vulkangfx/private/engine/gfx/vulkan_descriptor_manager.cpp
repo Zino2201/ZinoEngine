@@ -21,7 +21,7 @@ uint32_t VulkanDescriptorManager::DescriptorIndexPool::allocate()
 		free_indices.pop();
 	}
 
-	ZE_CHECK(index != -1);
+	ZE_CHECK(index != std::numeric_limits<uint32_t>::max());
 	return index;
 }
 
@@ -217,7 +217,7 @@ void VulkanDescriptorManager::update_descriptor(DescriptorIndexHandle in_index, 
 
 void VulkanDescriptorManager::update_descriptor(DescriptorIndexHandle in_index, VkSampler in_sampler)
 {
-	sampler_updates.emplace_back(in_index, in_sampler);
+	sampler_updates.push_back({ in_index, in_sampler });
 }
 
 void VulkanDescriptorManager::flush_updates()
@@ -244,7 +244,7 @@ void VulkanDescriptorManager::flush_updates()
 				0,
 				VK_WHOLE_SIZE });
 #endif
-			writes.emplace_back(
+			writes.push_back({
 				VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 				nullptr,
 				global_descriptor_set,
@@ -254,7 +254,7 @@ void VulkanDescriptorManager::flush_updates()
 				update.descriptor_type,
 				nullptr,
 				&std::get<VkDescriptorBufferInfo>(info),
-				nullptr);
+				nullptr });
 		}
 
 		for (const auto update : texture_updates)
@@ -274,7 +274,7 @@ void VulkanDescriptorManager::flush_updates()
 			else if (update.texture_type == VK_IMAGE_VIEW_TYPE_CUBE)
 				binding = srv_texture_cube_binding;
 
-			writes.emplace_back(
+			writes.push_back({
 				VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 				nullptr,
 				global_descriptor_set,
@@ -284,7 +284,7 @@ void VulkanDescriptorManager::flush_updates()
 				update.index.is_uav ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE : VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
 				&std::get<VkDescriptorImageInfo>(info),
 				nullptr,
-				nullptr);
+				nullptr });
 		}
 
 		for (const auto update : sampler_updates)
@@ -300,7 +300,7 @@ void VulkanDescriptorManager::flush_updates()
 				VK_NULL_HANDLE,
 				VK_IMAGE_LAYOUT_UNDEFINED });
 #endif
-			writes.emplace_back(
+			writes.push_back({
 				VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 				nullptr,
 				global_descriptor_set,
@@ -310,7 +310,7 @@ void VulkanDescriptorManager::flush_updates()
 				VK_DESCRIPTOR_TYPE_SAMPLER,
 				&std::get<VkDescriptorImageInfo>(info),
 				nullptr,
-				nullptr);
+				nullptr });
 		}
 
 		vkUpdateDescriptorSets(device.get_device(),
@@ -350,6 +350,8 @@ VulkanDescriptorManager::DescriptorIndexPool& VulkanDescriptorManager::get_pool(
 	case DescriptorType::Sampler:
 		ZE_CHECK(!is_uav);
 		return srv_samplers;
+	case DescriptorType::UniformBuffer:
+        ZE_ASSERTF(true, "Uniform buffers are not supported");
 	}
 
 	ZE_UNREACHABLE();

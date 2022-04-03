@@ -9,8 +9,6 @@
 namespace ze::platform
 {
 
-ZE_DEFINE_LOG_CATEGORY(windows_application);
-
 WindowsApplication* windows_platform_application = nullptr;
 
 WindowsApplication::WindowsApplication(
@@ -59,7 +57,7 @@ void WindowsApplication::update_monitors()
 		nullptr,
 		[](HMONITOR monitor, HDC, LPRECT, LPARAM data) -> BOOL
 		{
-			MONITORINFO win_monitor_info = { sizeof(MONITORINFO) };
+			MONITORINFO win_monitor_info = { sizeof(MONITORINFO), {}, {}, 0 };
 			GetMonitorInfo(monitor, &win_monitor_info);
 
 			UINT dpi_x;

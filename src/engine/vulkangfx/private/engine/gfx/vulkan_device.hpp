@@ -231,7 +231,7 @@ public:
 		const BackendDeviceResource in_src_buffer,
 		const BackendDeviceResource in_dst_texture,
 		const TextureLayout in_dst_layout,
-		const std::span<BufferTextureCopyRegion>& in_copy_regions);
+		const std::span<BufferTextureCopyRegion>& in_copy_regions) override;
 	void cmd_push_constants(const BackendDeviceResource in_list, 
 		const BackendDeviceResource in_pipeline_layout, 
 		ShaderStageFlags in_stage_flags, 

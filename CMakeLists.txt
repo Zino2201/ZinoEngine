@@ -47,8 +47,8 @@ macro(ze_add_module TARGET)
         DEFINE_SYMBOL "")
 
     if(ZE_WITH_SANITIZERS)
-        #target_compile_options(${TARGET} PRIVATE /fsanitize=address)
-        #target_compile_definitions(${TARGET} PRIVATE ZE_HAS_ASAN=1)
+        target_compile_options(${TARGET} PRIVATE /fsanitize=address)
+        target_compile_definitions(${TARGET} PRIVATE ZE_HAS_ASAN=1)
     endif()
 
     target_link_libraries(AllModules INTERFACE ${TARGET})

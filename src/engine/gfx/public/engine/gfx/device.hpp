@@ -142,7 +142,7 @@ public:
 
 class Swapchain : public BackendResourceWrapper<DeviceResourceType::Swapchain>
 {
-	friend class Device;
+	friend class gfx::Device;
 
 public:
 	Swapchain(Device& in_device,
@@ -934,7 +934,7 @@ private:
 	}
 private:
 	HandleType handle;
-	[[no_unique_address]] Deleter deleter;
+    ZE_NO_UNIQUE_ADDRESS Deleter deleter;
 };
 
 /**

@@ -43,7 +43,7 @@ public:
 			bool in_is_uav,
 			uint32_t in_index) : type(in_type), is_uav(in_is_uav), index(in_index) {}
 
-		operator bool() const { return index != -1; }
+		operator bool() const { return index != std::numeric_limits<uint32_t>::max(); }
 	};
 
 	VulkanDescriptorManager(VulkanDevice& in_device);

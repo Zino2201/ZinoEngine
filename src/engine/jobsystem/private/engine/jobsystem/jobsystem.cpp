@@ -1,8 +1,8 @@
 #include "engine/core.hpp"
 #include "engine/jobsystem/job.hpp"
 #include "engine/jobsystem/jobsystem.hpp"
-#include <random>
 #include "engine/jobsystem/worker_thread.hpp"
+#include "engine/random.hpp"
 
 namespace ze::jobsystem
 {
@@ -41,13 +41,11 @@ WorkerThread& get_worker_by_idx(size_t in_index)
 
 WorkerThread& get_current_or_random_worker()
 {
-	if (WorkerThread::get_current_worker_idx() != -1)
+	if (WorkerThread::get_current_worker_idx() != -1Ui64)
 		return get_worker_by_idx(WorkerThread::get_current_worker_idx());
 
-	std::random_device device;
-	std::mt19937 gen(device());
-	std::uniform_int_distribution<size_t> distribution(0, get_worker_count() - 1);
-	return get_worker_by_idx(distribution(gen));
+    const auto idx = random_SM64<size_t>(0, get_worker_count() - 1);
+	return get_worker_by_idx(idx);
 }
 
 }

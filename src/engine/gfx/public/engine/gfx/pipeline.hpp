@@ -23,12 +23,18 @@ enum class PipelineStageFlagBits
 	ComputeShader = 1 << 10,
 	Transfer = 1 << 11,
 	BottomOfPipe = 1 << 12,
-
-	/** Graphics stages */
-	AllGraphics = InputAssembler | VertexShader | TessellationControlShader | 
-		TessellationEvaluationShader | GeometryShader | FragmentShader | EarlyFragmentTests | LateFragmentTests | ColorAttachmentOutput,
 };
 ZE_ENABLE_FLAG_ENUMS(PipelineStageFlagBits, PipelineStageFlags);
+
+static constexpr PipelineStageFlags all_graphics_stage = PipelineStageFlagBits::InputAssembler |
+        PipelineStageFlagBits::VertexShader |
+        PipelineStageFlagBits::TessellationControlShader |
+        PipelineStageFlagBits::TessellationEvaluationShader |
+        PipelineStageFlagBits::GeometryShader |
+        PipelineStageFlagBits::FragmentShader |
+        PipelineStageFlagBits::EarlyFragmentTests |
+        PipelineStageFlagBits::LateFragmentTests |
+        PipelineStageFlagBits::ColorAttachmentOutput;
 
 enum class ShaderStageFlagBits
 {
@@ -38,11 +44,16 @@ enum class ShaderStageFlagBits
 	Geometry = 1 << 3,
 	Fragment = 1 << 4,
 	Compute = 1 << 5,
-
-	All = Vertex | TessellationControl | TessellationEvaluation | Geometry | Fragment | Compute
 };
 ZE_ENABLE_FLAG_ENUMS(ShaderStageFlagBits, ShaderStageFlags);
-	
+
+static constexpr ShaderStageFlags all_shader_stages = ShaderStageFlagBits::Vertex |
+        ShaderStageFlagBits::TessellationControl |
+        ShaderStageFlagBits::TessellationEvaluation |
+        ShaderStageFlagBits::Geometry |
+        ShaderStageFlagBits::Fragment |
+        ShaderStageFlagBits::Compute;
+
 /**
  * A single shader stage of a pipeline
  */
@@ -150,7 +161,7 @@ template<> struct hash<ze::gfx::PipelineShaderStage>
 	}
 };	
 
-inline std::string to_string(ze::gfx::ShaderStageFlagBits in_stage)
+inline std::string_view to_string(ze::gfx::ShaderStageFlagBits in_stage)
 {
 	switch(in_stage)
 	{

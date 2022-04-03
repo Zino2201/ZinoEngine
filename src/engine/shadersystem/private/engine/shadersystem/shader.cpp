@@ -3,11 +3,8 @@
 namespace ze::shadersystem
 {
 
-ShaderPermutationBuilder::ShaderPermutationBuilder(Shader& in_shader, const std::string_view& in_pass)
-	: shader(in_shader)
-{
-	id.pass = in_pass;
-}
+ShaderPermutationBuilder::ShaderPermutationBuilder(Shader& in_shader)
+	: shader(in_shader) {}
 
 void ShaderPermutationBuilder::add_option(std::string in_name, int32_t value)
 {
@@ -17,13 +14,13 @@ void ShaderPermutationBuilder::add_option(std::string in_name, int32_t value)
 		{
 			if(option.type == ShaderOptionType::Bool)
 			{
-				id.options[option.id_index] = static_cast<bool>(value);
+				id[option.id_index] = static_cast<bool>(value);
 			}
 			else
 			{
 				for(size_t i = 0; i < option.bit_width; ++i)
 				{
-					id.options[option.id_index + i] = value & 1;
+					id[option.id_index + i] = value & 1;
 					value >>= 1;
 				}
 			}
@@ -56,7 +53,7 @@ Shader::Shader(ShaderManager& in_shader_manager, const ShaderDeclaration& in_dec
 	ZE_CHECKF(required_bits < permutation_bit_count, "Shader has too many options !");
 }
 
-std::unique_ptr<ShaderInstance> Shader::instantiate(ShaderPermutationId in_id)
+std::unique_ptr<ShaderInstance> Shader::instantiate(ShaderPermutationPassIdPair in_id)
 {
 	if (ShaderPermutation* permutation = get_permutation(in_id))
 		return std::make_unique<ShaderInstance>(*permutation);
@@ -64,7 +61,7 @@ std::unique_ptr<ShaderInstance> Shader::instantiate(ShaderPermutationId in_id)
 	return nullptr;
 }
 
-ShaderPermutation* Shader::get_permutation(const ShaderPermutationId in_id)
+ShaderPermutation* Shader::get_permutation(const ShaderPermutationPassIdPair in_id)
 {
 	std::scoped_lock guard(permutations_lock);
 	const auto it = permutations.find(in_id);

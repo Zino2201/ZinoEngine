@@ -4,7 +4,6 @@
 #include <array>
 #include <memory>
 #include <type_traits>
-
 #include "engine/util/simple_pool.hpp"
 
 namespace ze::jobsystem
@@ -34,6 +33,8 @@ enum class JobPriority
 	Normal,
 	Low,
 };
+
+#pragma warning(disable: 4324)
 
 /**
  * A job, must be constructed using new_job functions since jobs must not be allocated on the stack
@@ -130,6 +131,8 @@ private:
 	std::array<Job*, max_continuations> continuations;
 	std::array<uint8_t, userdata_size> userdata;
 };
+
+#pragma warning(default: 4324)
 
 namespace detail
 {

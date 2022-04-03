@@ -22,14 +22,12 @@ VulkanBackend::VulkanBackend(const BackendFlags& in_flags, vkb::Instance in_inst
 
 VulkanBackend::~VulkanBackend()
 {
-	logger::verbose(log_vulkan, "~VulkanBackend()");
-
 	vkb::destroy_instance(instance);
 }
 	
 Result<std::unique_ptr<BackendDevice>, std::string> VulkanBackend::create_device(ShaderModel in_requested_shader_model)
 {
-	(void)(in_requested_shader_model);
+	UnusedParameters { in_requested_shader_model };
 
 	vkb::PhysicalDevice physical_device;
 	

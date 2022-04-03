@@ -36,8 +36,8 @@ public:
 		const WindowFlags& in_flags = WindowFlags()) = 0;
 	virtual void set_mouse_pos(const glm::ivec2& in_pos) = 0;
 	[[nodiscard]] virtual glm::ivec2 get_mouse_pos() const = 0;
-	[[nodiscard]] virtual void set_capture(const Window& in_window) = 0;
-	[[nodiscard]] virtual void release_capture() = 0;
+	virtual void set_capture(const Window& in_window) = 0;
+	virtual void release_capture() = 0;
 
 	/** Monitor API */
 	[[nodiscard]] virtual size_t get_num_monitors() const = 0;

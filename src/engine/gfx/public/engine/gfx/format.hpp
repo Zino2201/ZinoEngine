@@ -83,11 +83,10 @@ enum class Format
     Bc7SrgbBlock,
 };
 
-inline std::string to_string(const Format& in_format)
+inline std::string_view to_string(const Format in_format)
 {
     switch(in_format)
     {
-        default:
         case Format::Undefined:
             return "Undefined";
         case Format::D24UnormS8Uint:
@@ -142,6 +141,8 @@ inline std::string to_string(const Format& in_format)
             return "Bc6HUfloatBlock";
         case Format::Bc6HSfloatBlock:
             return "Bc6HSfloatBlock";
+        default:
+            ZE_UNREACHABLE();
     }
 }
 }

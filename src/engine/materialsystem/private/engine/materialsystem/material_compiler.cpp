@@ -63,7 +63,7 @@ Result<std::unique_ptr<Material>, std::string> compile_zematerial(shadersystem::
 
 	if(shadersystem::Shader* shader = in_manager.get_shader(shader_name))
 	{
-		return make_result(std::make_unique<Material>(shader));
+		return make_result(std::make_unique<Material>(shader, shadersystem::ShaderPermutationId{}));
 	}
 
 	return make_error(std::string("Shader not found."));

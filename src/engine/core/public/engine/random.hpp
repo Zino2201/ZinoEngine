@@ -31,7 +31,7 @@ inline double random_SM64_double()
 template<typename T>
 inline T random_SM64(T A = std::numeric_limits<T>::min(), T B = std::numeric_limits<T>::max())
 {
-    return A + detail::random_SM64_double() * (B - A);
+    return static_cast<T>(A + detail::random_SM64_double() * (B - A));
 }
 
 }

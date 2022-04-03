@@ -24,7 +24,7 @@ enum class GfxResult
 namespace std
 {
 
-inline std::string to_string(const ze::gfx::GfxResult& in_result)
+inline std::string_view to_string(const ze::gfx::GfxResult in_result)
 {
 	switch(in_result)
 	{

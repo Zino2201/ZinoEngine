@@ -1,8 +1,6 @@
 #pragma once
 
-#include "engine/gfx/device.hpp"
 #include "engine/shadersystem/shader.hpp"
-#include <robin_hood.h>
 
 namespace ze
 {
@@ -10,12 +8,13 @@ namespace ze
 class Material
 {
 public:
-	Material(shadersystem::Shader* in_shader_permutation);
+	Material(shadersystem::Shader* in_shader, shadersystem::ShaderPermutationId in_permutation_id);
 
-	[[nodiscard]] shadersystem::Shader* get_shader() const { return shader; }
+	shadersystem::Shader* get_shader() const { return shader; }
+	const auto& get_shader_permutation_id() const { return shader_permutation_id; }
 private:
 	shadersystem::Shader* shader;
-	//gfx::PipelineMaterialState material_state;
+	shadersystem::ShaderPermutationId shader_permutation_id;
 };
 
 }

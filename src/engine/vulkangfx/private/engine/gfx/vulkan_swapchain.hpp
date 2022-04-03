@@ -27,7 +27,6 @@ public:
 private:
 	VulkanDevice& device;
 	vkb::Swapchain swapchain;
-	VkSurfaceKHR surface;
 	uint32_t current_image;
 	std::vector<BackendDeviceResource> images;
 	std::vector<BackendDeviceResource> image_views;
